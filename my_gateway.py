@@ -15,11 +15,8 @@ from urllib.parse import urlparse
 PORT = int(os.environ.get("PORT", 8080))
 DB_FILE = "payments.db"
 
-# Admin Credentials & SMTP Settings
 ADMIN_EMAIL = "sahudolat21@gmail.com"
 ADMIN_PASSWORD = "Dk@852128"
-SMTP_EMAIL = os.environ.get("SMTP_EMAIL", "sahudolat21@gmail.com")
-SMTP_PASS = os.environ.get("SMTP_PASS", "")
 
 RESET_OTP = None
 
@@ -246,7 +243,7 @@ FORGET_HTML = f"""<!DOCTYPE html>
         </div>
 
         <div id="step2" style="display:none;">
-            <input type="text" id="otp" placeholder="Enter OTP">
+            <input type="text" id="otp" placeholder="Enter OTP from Gmail">
             <input type="password" id="npass" placeholder="New Password">
             <input type="password" id="cpass" placeholder="Confirm Password">
             <button onclick="verifyAndReset()">Reset Password</button>
@@ -255,7 +252,7 @@ FORGET_HTML = f"""<!DOCTYPE html>
     </div>
     <script>
     function sendOtp() {{
-        document.getElementById('msg').innerHTML = '<span style="color:#38bdf8;">OTP bhej rahe hain...</span>';
+        document.getElementById('msg').innerHTML = '<span style="color:#38bdf8;">OTP Gmail par bhej rahe hain...</span>';
         fetch('/api/admin/send-otp', {{method:'POST'}})
         .then(r => r.json())
         .then(d => {{
@@ -426,16 +423,13 @@ class H(http.server.SimpleHTTPRequestHandler):
             err_msg = ""
             
             if smtp_p:
-                # Try Port 587 (STARTTLS - standard & fast on cloud servers)
                 try:
-                    msg = MIMEText(f"Aapka Admin Password Reset OTP hai: {RESET_OTP}
-
-Yeh OTP agle 10 minute tak valid hai.")
+                    msg = MIMEText(f"Aapka Admin Password Reset OTP hai: {RESET_OTP}")
                     msg["Subject"] = "Admin Password Reset OTP"
                     msg["From"] = smtp_e
                     msg["To"] = ADMIN_EMAIL
                     
-                    server = smtplib.SMTP("smtp.gmail.com", 587, timeout=10)
+                    server = smtplib.SMTP("smtp.gmail.com", 587, timeout=8)
                     server.starttls()
                     server.login(smtp_e, smtp_p)
                     server.sendmail(smtp_e, [ADMIN_EMAIL], msg.as_string())
@@ -443,8 +437,7 @@ Yeh OTP agle 10 minute tak valid hai.")
                     sent = True
                 except Exception as ex1:
                     try:
-                        # Fallback to SSL 465
-                        server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10)
+                        server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=8)
                         server.login(smtp_e, smtp_p)
                         server.sendmail(smtp_e, [ADMIN_EMAIL], msg.as_string())
                         server.quit()
@@ -452,12 +445,12 @@ Yeh OTP agle 10 minute tak valid hai.")
                     except Exception as ex2:
                         err_msg = str(ex2)
             else:
-                err_msg = "Render Environment me SMTP_PASS nahi mila."
+                err_msg = "Render me SMTP_PASS set nahi hai."
 
             if sent:
-                res_data = {"ok": True, "msg": "OTP aapke Gmail (sahudolat21@gmail.com) par bhej diya gaya hai! Inbox check karein."}
+                res_data = {"ok": True, "msg": "OTP aapke Gmail par bhej diya gaya hai! Inbox check karein."}
             else:
-                res_data = {"ok": False, "msg": f"Email bhejne me dikkat: {err_msg}. Render me SMTP_PASS sahi se dalein."}
+                res_data = {"ok": False, "msg": f"Email error: {err_msg}"}
 
             self.send_response(200)
             self.send_header("Content-type", "application/json")
