@@ -81,7 +81,7 @@ HTML_PAGE = """<!DOCTYPE html>
       
       <div class="qr-container">
         <img id="qr-img" class="qr-img" src="" alt="UPI QR">
-<div style="margin-top:10px;"><a id="download-btn" download="upi_qr.png" type="image/png" href="#" style="display: inline-block; margin-top: 10px; padding: 8px 16px; background: #16a34a; color: white; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: bold;">📥 Download QR Code</a></div>
+<div style="margin-top:10px;"></div>
       </div>
       <p style="font-size: 12px; color: #94a3b8; margin: 0 0 10px;"><div style="margin: 10px auto 14px auto; max-width: 90%; padding: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px; font-size: 12px; color: #cbd5e1; text-align: left;">
             <span style="color: #38bdf8; font-weight: bold;">💳 Supported Modes:</span><br>
@@ -89,7 +89,28 @@ HTML_PAGE = """<!DOCTYPE html>
             • Debit Card (Linked to UPI)<br>
             • UPI (PhonePe, GPay, Paytm)
         </div>
-        Scan karein ya direct app choose karein:</p>
+        
+<button type="button" onclick="saveQrImage()" style="background:#16a34a;color:#fff;padding:8px 16px;border-radius:6px;border:none;font-weight:bold;cursor:pointer;margin:10px auto;display:block;font-size:14px;">📥 Download QR Code</button>
+
+<script>
+function saveQrImage() {
+    var img = document.querySelector("img");
+    if (!img) { alert("QR image not found"); return; }
+    var canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth || 300;
+    canvas.height = img.naturalHeight || 300;
+    var ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    var link = document.createElement("a");
+    link.download = "upi_qr.png";
+    link.href = canvas.toDataURL("image/png");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+</script>
+
+Scan karein ya direct app choose karein:</p>
 
       <!-- Three Dedicated Buttons -->
       <div class="app-btn-group">
