@@ -57,7 +57,7 @@ PAY_PAGE = f"""<!DOCTYPE html>
         <h3 style="margin:0;">{NAME}</h3>
         <div style="color:#94a3b8;font-size:12px;margin-top:4px;">{UPI_ID}</div>
         
-        <!-- Step 1: Amount Input Only -->
+        <!-- Step 1: Amount Input -->
         <div id="step1">
             <div class="amt-box">
                 <label>Enter Amount (₹):</label>
@@ -67,7 +67,7 @@ PAY_PAGE = f"""<!DOCTYPE html>
             <div id="step1-err" style="color:#ef4444;font-size:13px;margin-top:8px;"></div>
         </div>
 
-        <!-- Step 2: Payment Options (Hidden by default) -->
+        <!-- Step 2: Payment Details -->
         <div id="step2">
             <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 6px 0;">
                 <span id="displayAmt" style="font-size:20px;color:#38bdf8;font-weight:bold;">₹0</span>
@@ -305,9 +305,23 @@ class H(http.server.SimpleHTTPRequestHandler):
             trs = ""
             for r in rows:
                 col = "#10b981" if r[4] == "APPROVED" else ("#ef4444" if r[4] == "REJECTED" else "#f59e0b")
-                im = f'<a href="{r[3]}" target="_blank"><img src="{r[3]}" style="width:60px;max-height:60px;border-radius:4px;"></a>' if r[3] else "-"
-                act = f'<button onclick="act({r[0]},\'APPROVED\')" style="background:#10b981;color:#fff;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;">Approve</button> <button onclick="act({r[0]},\'REJECTED\')" style="background:#ef4444;color:#fff;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;margin-left:4px;">Reject</button>' if r[4] == "PENDING" else f'<b>{r[4]}</b>'
-                trs += f'<tr style="border-bottom:1px solid #334155;"><td>#{r[0]}</td><td style="font-family:monospace;font-weight:bold;">{r[1]}</td><td>₹{r[2]}</td><td>{im}</td><td style="color:{col};font-weight:bold;">{r[4]}</td><td style="font-size:11px;color:#94a3b8;">{r[5]}</td><td>{act}</td></tr>'
+                
+                # Image thumbnail with modal preview trigger
+                if r[3]:
+                    im = f'<img src="{r[3]}" onclick="viewImg(\'{r[3]}\')" style="width:55px;height:55px;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid #475569;" title="Click to view full photo">'
+                else:
+                    im = "-"
+
+                # Action buttons (Approve / Reject)
+                if r[4] == "PENDING":
+                    act = f'<button onclick="act({r[0]},\'APPROVED\')" style="background:#10b981;color:#fff;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:bold;">Approve</button> <button onclick="act({r[0]},\'REJECTED\')" style="background:#eab308;color:#000;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;margin-left:4px;font-size:12px;font-weight:bold;">Reject</button>'
+                else:
+                    act = f'<b style="color:{col};">{r[4]}</b>'
+
+                # Delete Button
+                del_btn = f'<button onclick="delTx({r[0]})" style="background:#ef4444;color:#fff;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:12px;margin-left:6px;font-weight:bold;">🗑 Delete</button>'
+
+                trs += f'<tr style="border-bottom:1px solid #334155;"><td style="font-weight:bold;">#{r[0]}</td><td style="font-family:monospace;font-weight:bold;">{r[1]}</td><td>₹{r[2]}</td><td>{im}</td><td style="color:{col};font-weight:bold;">{r[4]}</td><td style="font-size:11px;color:#94a3b8;">{r[5]}</td><td style="white-space:nowrap;">{act} {del_btn}</td></tr>'
 
             adm = f"""<!DOCTYPE html>
 <html>
@@ -320,6 +334,11 @@ class H(http.server.SimpleHTTPRequestHandler):
         table {{ width:100%; background:#1e293b; border-collapse:collapse; border-radius:8px; overflow:hidden; margin-top:12px; }}
         th, td {{ padding:10px; text-align:left; }}
         th {{ background:#334155; font-size:13px; }}
+
+        /* Image Fullscreen Modal */
+        #imgModal {{ display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.9); justify-content:center; align-items:center; padding:15px; }}
+        #imgModal img {{ max-width:95%; max-height:85vh; border-radius:8px; border:2px solid #38bdf8; object-fit:contain; }}
+        #closeModal {{ position:absolute; top:20px; right:25px; color:#fff; font-size:32px; font-weight:bold; cursor:pointer; background:rgba(255,255,255,0.2); width:40px; height:40px; line-height:36px; text-align:center; border-radius:50%; }}
     </style>
 </head>
 <body>
@@ -330,19 +349,47 @@ class H(http.server.SimpleHTTPRequestHandler):
             <button onclick="document.cookie='admin_auth=; Max-Age=0; path=/;';location.href='/admin/login';" style="background:#ef4444;color:#fff;padding:8px 14px;border:none;border-radius:5px;cursor:pointer;margin-left:5px;">Logout</button>
         </div>
     </div>
+    
     <div style="overflow-x:auto;">
         <table>
             <thead><tr><th>ID</th><th>UTR</th><th>Amt</th><th>Proof</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
-            <tbody>{trs if trs else '<tr><td colspan="7" style="text-align:center;padding:20px;">Koi proof nahi hai.</td></tr>'}</tbody>
+            <tbody>{trs if trs else '<tr><td colspan="7" style="text-align:center;padding:25px;color:#94a3b8;">Koi transaction record nahi hai.</td></tr>'}</tbody>
         </table>
     </div>
+
+    <!-- Fullscreen Image Viewer Modal -->
+    <div id="imgModal" onclick="closeImg()">
+        <span id="closeModal">&times;</span>
+        <img id="modalImg" src="">
+    </div>
+
     <script>
+    function viewImg(src) {{
+        document.getElementById('modalImg').src = src;
+        document.getElementById('imgModal').style.display = 'flex';
+    }}
+
+    function closeImg() {{
+        document.getElementById('imgModal').style.display = 'none';
+        document.getElementById('modalImg').src = '';
+    }}
+
     function act(id, st) {{
         fetch('/api/action', {{
             method: 'POST',
             headers: {{ 'Content-Type': 'application/json' }},
             body: JSON.stringify({{ id: id, st: st }})
         }}).then(() => location.reload());
+    }}
+
+    function delTx(id) {{
+        if (confirm('Kya aap sach me record #' + id + ' delete karna chahte hain?')) {{
+            fetch('/api/delete', {{
+                method: 'POST',
+                headers: {{ 'Content-Type': 'application/json' }},
+                body: JSON.stringify({{ id: id }})
+            }}).then(() => location.reload());
+        }}
     }}
     </script>
 </body>
@@ -391,6 +438,17 @@ class H(http.server.SimpleHTTPRequestHandler):
             conn = sqlite3.connect(DB_FILE)
             c = conn.cursor()
             c.execute("UPDATE tx SET status=? WHERE id=?", (d.get("st"), d.get("id")))
+            conn.commit()
+            conn.close()
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"ok":true}')
+
+        elif self.path == "/api/delete":
+            conn = sqlite3.connect(DB_FILE)
+            c = conn.cursor()
+            c.execute("DELETE FROM tx WHERE id=?", (d.get("id"),))
             conn.commit()
             conn.close()
             self.send_response(200)
