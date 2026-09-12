@@ -149,6 +149,16 @@ HTML_PAGE = """<!DOCTYPE html>
     }
   </script>
 
+
+        <div style="margin: 15px auto; max-width: 320px; padding: 12px; background: #eef2ff; border-radius: 8px; border: 1px dashed #6366f1; font-size: 13px; color: #3730a3; text-align: left;">
+            <strong>💳 Supported Payment Methods:</strong>
+            <ul style="margin: 5px 0 0 18px; padding: 0;">
+                <li>UPI (PhonePe, Google Pay, Paytm)</li>
+                <li>RuPay Credit Card (via UPI Apps)</li>
+                <li>Debit Card (Linked to UPI)</li>
+            </ul>
+        </div>
+
 </body>
 </html>
 """
