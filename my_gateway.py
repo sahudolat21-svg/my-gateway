@@ -705,9 +705,16 @@ class H(http.server.SimpleHTTPRequestHandler):
     <!-- All-Time Records Modal -->
     <div id="allRecordsModal">
         <div class="modal-content">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                 <h3 style="margin:0;color:#38bdf8;">📊 Lifetime All-Day Records</h3>
                 <span onclick="closeAllRecords()" style="font-size:24px;color:#fff;cursor:pointer;font-weight:bold;padding:0 8px;">&times;</span>
+            </div>
+
+            <!-- CENTER ALL RECORD DELETE BUTTON -->
+            <div style="text-align:center;margin-bottom:12px;">
+                <button onclick="openDeleteAllModal()" style="background:#dc2626;color:#fff;font-size:13px;padding:8px 16px;border-radius:6px;width:auto;display:inline-flex;align-items:center;gap:6px;box-shadow:0 3px 10px rgba(220,38,38,0.4);">
+                    🚨 Delete All Records
+                </button>
             </div>
             
             <div class="grid" style="margin-bottom:12px;">
@@ -735,6 +742,28 @@ class H(http.server.SimpleHTTPRequestHandler):
         </div>
     </div>
 
+    <!-- TYPE CONFIRMATION MODAL FOR DELETING ALL RECORDS -->
+    <div id="deleteAllModal" class="hand-modal">
+        <div class="hand-modal-content" style="max-width:380px;text-align:center;">
+            <div style="font-size:36px;margin-bottom:6px;">⚠️</div>
+            <h3 style="margin:0 0 8px 0;color:#ef4444;">Warning: Delete All Records</h3>
+            <p style="font-size:12px;color:#cbd5e1;line-height:1.4;margin:0 0 10px 0;">
+                Agar aap sach me saara record permanently delete karna chahte hain, toh niche diye gaye box me exact ye text likhein:
+            </p>
+            <div style="background:#0f172a;padding:8px;border-radius:6px;border:1px dashed #ef4444;color:#facc15;font-weight:bold;font-size:13px;user-select:all;margin-bottom:12px;">
+                Haa Me Delet kar raha hoo all record
+            </div>
+            
+            <input type="text" id="confirmDeleteInput" placeholder="Yahan type karein..." style="text-align:center;border-color:#ef4444;">
+            <div id="deleteErr" style="color:#ef4444;font-size:12px;margin-bottom:10px;font-weight:bold;"></div>
+
+            <div style="display:flex;gap:10px;">
+                <button onclick="confirmDeleteAll()" style="background:#dc2626;color:#fff;flex:2;">Confirm Delete</button>
+                <button onclick="closeDeleteAllModal()" style="background:#475569;color:#fff;flex:1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script>
     var lifetimeRevenue = "{all_rev:,.0f}";
     var lifetimeApproved = "{all_app}";
@@ -749,6 +778,36 @@ class H(http.server.SimpleHTTPRequestHandler):
 
     function openAdminHandModal() {{ document.getElementById('adminHandModal').style.display = 'flex'; }}
     function closeAdminHandModal() {{ document.getElementById('adminHandModal').style.display = 'none'; }}
+
+    function openDeleteAllModal() {{
+        document.getElementById('confirmDeleteInput').value = "";
+        document.getElementById('deleteErr').innerText = "";
+        document.getElementById('deleteAllModal').style.display = 'flex';
+    }}
+    function closeDeleteAllModal() {{
+        document.getElementById('deleteAllModal').style.display = 'none';
+    }}
+
+    function confirmDeleteAll() {{
+        var val = document.getElementById('confirmDeleteInput').value.trim();
+        var requiredText = "Haa Me Delet kar raha hoo all record";
+        if (val !== requiredText) {{
+            document.getElementById('deleteErr').innerText = "❌ text not match";
+            return;
+        }}
+        fetch('/api/delete-all', {{
+            method: 'POST',
+            headers: {{'Content-Type': 'application/json'}},
+            body: JSON.stringify({{ confirmation: val }})
+        }}).then(r => r.json()).then(d => {{
+            if (d.ok) {{
+                alert('Saare records successfully delete kar diye gaye!');
+                location.reload();
+            }} else {{
+                document.getElementById('deleteErr').innerText = d.msg;
+            }}
+        }});
+    }}
 
     function delTxOwner(id) {{
         if(confirm('Kya aap sach me record #' + id + ' delete karna chahte hain?')) {{
@@ -828,7 +887,6 @@ class H(http.server.SimpleHTTPRequestHandler):
         if(!p) return alert('Kripya naya password daalein!');
         postSetting({{ owner_user: u, owner_pass: p }});
     }}
-
     function saveUserCustomization() {{
         postSetting({{
             user_page_title: document.getElementById('user_page_title').value.trim(),
@@ -1096,6 +1154,29 @@ class H(http.server.SimpleHTTPRequestHandler):
             conn = get_db()
             c = conn.cursor()
             c.execute("DELETE FROM tx WHERE id=?", (d.get("id"),))
+            conn.commit()
+            conn.close()
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"ok":true}')
+
+        elif self.path == "/api/delete-all":
+            if not self.is_auth("owner"):
+                self.send_response(403)
+                self.end_headers()
+                return
+            conf = d.get("confirmation", "").strip()
+            if conf != "Haa Me Delet kar raha hoo all record":
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"ok":false,"msg":"Text not match!"}')
+                return
+            conn = get_db()
+            c = conn.cursor()
+            c.execute("DELETE FROM tx")
+            c.execute("DELETE FROM sqlite_sequence WHERE name='tx'")
             conn.commit()
             conn.close()
             self.send_response(200)
