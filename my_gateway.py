@@ -8,7 +8,6 @@ from urllib.parse import urlparse
 
 PORT = int(os.environ.get("PORT", 8080))
 
-# Persistent database storage path
 if os.path.exists("/var/data"):
     DB_FILE = "/var/data/payments.db"
 else:
@@ -117,7 +116,7 @@ def render_pay_page():
             </div>
         </div>''',
         "u_qr": '<div id="u_qr"><div id="qrcode"></div></div>',
-        "u_downbtn": f'<button id="u_downbtn" type="button" onclick="downloadQR()" style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:5px;margin-top:6px;font-weight:bold;cursor:pointer;width:100%;">{txt_down}</button>',
+        "u_downbtn": f'<button id="u_downbtn" type="button" onclick="downloadQR()" style="background:#16a34a;color:#fff;border:none;padding:10px 14px;border-radius:6px;margin-top:6px;font-weight:bold;cursor:pointer;width:100%;font-size:14px;">{txt_down}</button>',
         "u_badge": f'<div id="u_badge" class="badge">{txt_badge}</div>',
         "u_phonepe": f'<a id="btnPhonePe" class="btn" style="background:#5f259f;" href="#">{txt_phonepe}</a>',
         "u_gpay": f'<a id="btnGPay" class="btn" style="background:#1a73e8;" href="#">{txt_gpay}</a>',
@@ -229,13 +228,29 @@ def render_pay_page():
         document.getElementById('step1').style.display = 'block';
     }}
 
+    /* Robust QR code download supporting both canvas and img on all mobile browsers */
     function downloadQR() {{
+        var canvas = document.querySelector('#qrcode canvas');
         var img = document.querySelector('#qrcode img');
-        if (!img || !img.src) return;
+        var dataUrl = "";
+
+        if (canvas) {{
+            dataUrl = canvas.toDataURL("image/png");
+        }} else if (img && img.src) {{
+            dataUrl = img.src;
+        }}
+
+        if (!dataUrl) {{
+            alert("QR Code abhi taiyar nahi hai, kripya thoda ruk kar dubara dabayein.");
+            return;
+        }}
+
         var a = document.createElement('a');
-        a.href = img.src;
-        a.download = 'upi_qr.png';
+        a.href = dataUrl;
+        a.download = 'upi_payment_qr.png';
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
     }}
 
     function sendProof() {{
@@ -502,7 +517,6 @@ class H(http.server.SimpleHTTPRequestHandler):
             admin_hand_order = get_setting("admin_hand_order", '["a_header","a_table"]')
             admin_hand_texts = get_setting("admin_hand_texts", '{}')
 
-            # Table rows with Delete button in Lifetime records modal
             all_trs_html = ""
             for r in all_rows:
                 col = "#10b981" if r[3] == "APPROVED" else ("#ef4444" if r[3] == "REJECTED" else "#f59e0b")
@@ -530,7 +544,6 @@ class H(http.server.SimpleHTTPRequestHandler):
         label {{ font-size:12px; color:#94a3b8; font-weight:bold; }}
         button {{ width:100%; padding:12px; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:15px; }}
 
-        /* FULLSCREEN MODALS FOR HAND CONTROL SCREENS */
         .hand-modal {{ display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.92); justify-content:center; align-items:center; padding:15px; }}
         .hand-modal-content {{ background:#1e293b; width:100%; max-width:440px; max-height:94vh; border-radius:16px; border:1px solid #38bdf8; display:flex; flex-direction:column; padding:16px; overflow-y:auto; }}
         
@@ -686,7 +699,7 @@ class H(http.server.SimpleHTTPRequestHandler):
         </div>
     </div>
 
-    <!-- All-Time Records Modal (With Delete Action & PDF Download) -->
+    <!-- All-Time Records Modal -->
     <div id="allRecordsModal">
         <div class="modal-content">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -776,7 +789,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             doc.autoTable({{
                 html: '#recordsTable',
                 startY: doc.lastAutoTable.finalY + 10,
-                columns: [0, 1, 2, 3, 4], // Exclude action column from PDF
+                columns: [0, 1, 2, 3, 4],
                 styles: {{ fontSize: 9, cellPadding: 3 }},
                 headStyles: {{ fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' }},
                 alternateRowStyles: {{ fillColor: [248, 250, 252] }},
@@ -822,7 +835,7 @@ class H(http.server.SimpleHTTPRequestHandler):
         }});
     }}
 
-    /* ================= VISUAL SCREEN BUILDER ENGINE ================= */
+    /* VISUAL SCREEN BUILDER ENGINE */
     var userSavedOrder = {user_hand_order};
     var userSavedTexts = {user_hand_texts};
 
