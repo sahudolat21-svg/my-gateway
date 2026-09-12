@@ -36,20 +36,20 @@ PAY_PAGE = f"""<!DOCTYPE html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>UPI Checkout</title>
-    <!-- Lightweight QR Library for instant real-time dynamic QR generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         * {{ touch-action: manipulation; -webkit-text-size-adjust: 100%; box-sizing: border-box; }}
         body {{ background:#0f172a; color:#f8fafc; font-family:sans-serif; display:flex; justify-content:center; align-items:center; min-height:100vh; margin:0; padding:15px; }}
-        .c {{ background:#1e293b; padding:20px; border-radius:15px; max-width:360px; width:100%; text-align:center; border:1px solid #334155; }}
-        .amt-box {{ margin:12px 0; text-align:left; }}
+        .c {{ background:#1e293b; padding:22px; border-radius:16px; max-width:360px; width:100%; text-align:center; border:1px solid #334155; }}
+        .amt-box {{ margin:15px 0; text-align:left; }}
         .amt-box label {{ font-size:13px; color:#94a3b8; font-weight:bold; }}
-        .amt-input {{ width:100%; padding:12px; margin-top:5px; background:#0f172a; border:2px solid #38bdf8; border-radius:8px; color:#38bdf8; font-size:20px !important; font-weight:bold; text-align:center; }}
+        .amt-input {{ width:100%; padding:14px; margin-top:6px; background:#0f172a; border:2px solid #38bdf8; border-radius:8px; color:#38bdf8; font-size:22px !important; font-weight:bold; text-align:center; }}
         .btn {{ display:block; width:100%; padding:12px; margin:6px 0; border-radius:6px; border:none; color:#fff; font-weight:bold; text-decoration:none; cursor:pointer; font-size:15px; text-align:center; }}
         input {{ width:100%; padding:12px; margin:6px 0 12px 0; background:#0f172a; border:1px solid #475569; border-radius:5px; color:#fff; font-size:16px !important; }}
         .badge {{ margin: 10px auto; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; font-size: 11px; color: #cbd5e1; text-align: left; }}
         #success-modal {{ display:none; background:#064e3b; border:1px solid #10b981; padding:15px; border-radius:10px; margin-top:15px; }}
         #qrcode {{ display:flex; justify-content:center; margin:10px auto; background:#fff; padding:10px; border-radius:8px; width:fit-content; }}
+        #step2 {{ display:none; }}
     </style>
 </head>
 <body>
@@ -57,32 +57,44 @@ PAY_PAGE = f"""<!DOCTYPE html>
         <h3 style="margin:0;">{NAME}</h3>
         <div style="color:#94a3b8;font-size:12px;margin-top:4px;">{UPI_ID}</div>
         
-        <!-- Amount Input Box -->
-        <div class="amt-box">
-            <label>Amount (₹):</label>
-            <input type="number" id="amtInput" class="amt-input" value="100" min="1" oninput="updatePaymentLinks()">
-        </div>
-        
-        <div id="qrcode"></div>
-        <button type="button" onclick="downloadQR()" style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:5px;margin-top:8px;font-weight:bold;cursor:pointer;">📥 Download QR Code</button>
-
-        <div class="badge">
-            <span style="color: #38bdf8; font-weight: bold;">💳 Supported:</span> RuPay Credit Card, Debit Card & UPI Apps
+        <!-- Step 1: Amount Input Only -->
+        <div id="step1">
+            <div class="amt-box">
+                <label>Enter Amount (₹):</label>
+                <input type="number" id="amtInput" class="amt-input" placeholder="Enter amount" min="1">
+            </div>
+            <button class="btn" style="background:#0284c7;font-size:16px;padding:14px;" onclick="proceedToPay()">Proceed to Pay ➔</button>
+            <div id="step1-err" style="color:#ef4444;font-size:13px;margin-top:8px;"></div>
         </div>
 
-        <a id="btnPhonePe" class="btn" style="background:#5f259f;" href="#">Pay via PhonePe</a>
-        <a id="btnGPay" class="btn" style="background:#1a73e8;" href="#">Pay via Google Pay</a>
-        <a id="btnPaytm" class="btn" style="background:#00b9f1;" href="#">Pay via Paytm</a>
+        <!-- Step 2: Payment Options (Hidden by default) -->
+        <div id="step2">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 6px 0;">
+                <span id="displayAmt" style="font-size:20px;color:#38bdf8;font-weight:bold;">₹0</span>
+                <button onclick="changeAmt()" style="background:transparent;border:1px solid #64748b;color:#94a3b8;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px;">Edit Amount</button>
+            </div>
 
-        <div id="form-container" style="border-top:1px solid #334155;margin-top:15px;padding-top:10px;text-align:left;font-size:12px;">
-            <label>12-Digit UTR Number:</label>
-            <input type="text" id="u" maxlength="12" placeholder="Enter 12-digit UTR">
-            
-            <label>Payment Proof (Screenshot):</label>
-            <input type="file" id="p" accept="image/*">
-            
-            <button class="btn" style="background:#10b981;" onclick="sendProof()">Submit Proof</button>
-            <div id="st" style="margin-top:8px;font-weight:bold;text-align:center;"></div>
+            <div id="qrcode"></div>
+            <button type="button" onclick="downloadQR()" style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:5px;margin-top:6px;font-weight:bold;cursor:pointer;">📥 Download QR Code</button>
+
+            <div class="badge">
+                <span style="color: #38bdf8; font-weight: bold;">💳 Supported:</span> RuPay Credit Card, Debit Card & UPI Apps
+            </div>
+
+            <a id="btnPhonePe" class="btn" style="background:#5f259f;" href="#">Pay via PhonePe</a>
+            <a id="btnGPay" class="btn" style="background:#1a73e8;" href="#">Pay via Google Pay</a>
+            <a id="btnPaytm" class="btn" style="background:#00b9f1;" href="#">Pay via Paytm</a>
+
+            <div id="form-container" style="border-top:1px solid #334155;margin-top:15px;padding-top:10px;text-align:left;font-size:12px;">
+                <label>12-Digit UTR Number:</label>
+                <input type="text" id="u" maxlength="12" placeholder="Enter 12-digit UTR">
+                
+                <label>Payment Proof (Screenshot):</label>
+                <input type="file" id="p" accept="image/*">
+                
+                <button class="btn" style="background:#10b981;" onclick="sendProof()">Submit Proof</button>
+                <div id="st" style="margin-top:8px;font-weight:bold;text-align:center;"></div>
+            </div>
         </div>
 
         <div id="success-modal">
@@ -94,12 +106,22 @@ PAY_PAGE = f"""<!DOCTYPE html>
     <script>
     var upiId = "{UPI_ID}";
     var name = "{NAME}";
-    var qrObj = null;
     var currentUtr = "";
     var checkTimer = null;
+    var currentAmt = "";
 
-    function updatePaymentLinks() {{
-        var amt = document.getElementById('amtInput').value.trim() || "1";
+    function proceedToPay() {{
+        var amt = document.getElementById('amtInput').value.trim();
+        var err = document.getElementById('step1-err');
+        if (!amt || parseFloat(amt) <= 0) {{
+            err.innerText = "Kripya valid amount daalein!";
+            return;
+        }}
+        err.innerText = "";
+        currentAmt = amt;
+
+        document.getElementById('displayAmt').innerText = "₹" + amt;
+
         var upiUri = "upi://pay?pa=" + encodeURIComponent(upiId) + "&pn=" + encodeURIComponent(name) + "&am=" + amt + "&cu=INR";
 
         document.getElementById('btnPhonePe').href = "phonepe://pay?pa=" + encodeURIComponent(upiId) + "&pn=" + encodeURIComponent(name) + "&am=" + amt + "&cu=INR";
@@ -108,16 +130,21 @@ PAY_PAGE = f"""<!DOCTYPE html>
 
         var qrDiv = document.getElementById('qrcode');
         qrDiv.innerHTML = "";
-        qrObj = new QRCode(qrDiv, {{
+        new QRCode(qrDiv, {{
             text: upiUri,
             width: 170,
             height: 170,
             correctLevel: QRCode.CorrectLevel.M
         }});
+
+        document.getElementById('step1').style.display = 'none';
+        document.getElementById('step2').style.display = 'block';
     }}
 
-    // Init with default amount
-    updatePaymentLinks();
+    function changeAmt() {{
+        document.getElementById('step2').style.display = 'none';
+        document.getElementById('step1').style.display = 'block';
+    }}
 
     function downloadQR() {{
         var img = document.querySelector('#qrcode img');
@@ -131,7 +158,6 @@ PAY_PAGE = f"""<!DOCTYPE html>
     function sendProof() {{
         var u = document.getElementById('u').value.trim();
         var f = document.getElementById('p').files[0];
-        var amt = document.getElementById('amtInput').value.trim() || "100";
         var s = document.getElementById('st');
         if (u.length !== 12) {{
             s.innerHTML = '<span style="color:#ef4444;">12-Digit valid UTR daalein</span>';
@@ -148,7 +174,7 @@ PAY_PAGE = f"""<!DOCTYPE html>
             fetch('/api/submit', {{
                 method: 'POST',
                 headers: {{ 'Content-Type': 'application/json' }},
-                body: JSON.stringify({{ utr: u, proof: reader.result, amt: amt }})
+                body: JSON.stringify({{ utr: u, proof: reader.result, amt: currentAmt }})
             }})
             .then(res => res.json())
             .then(d => {{
