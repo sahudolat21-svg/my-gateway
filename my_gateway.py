@@ -4,299 +4,232 @@ import json
 import qrcode
 import io
 import base64
-import re
-from urllib.parse import parse_qs, urlparse
+import os
+import sqlite3
+from datetime import datetime
+from urllib.parse import urlparse
 
-PORT = 5000
+PORT = int(os.environ.get("PORT", 8080))
+DB_FILE = "payments.db"
 
-MY_UPI_ID = "7546982355-1@mbkns"
-MY_NAME = "Rupa Kumari"
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS tx (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        utr TEXT UNIQUE,
+        amt TEXT,
+        proof TEXT,
+        status TEXT DEFAULT 'PENDING',
+        dt TEXT
+    )""")
+    conn.commit()
+    conn.close()
 
-# Received payments store (In-memory database)
-received_payments = {}
+init_db()
 
-HTML_PAGE = """<!DOCTYPE html>
-<html lang="hi">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rupa Kumari - Secure Gateway</title>
-  <style>
-    body {
-      margin: 0; background: #0b0f19;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh;
-      padding: 15px; box-sizing: border-box;
-    }
-    .card {
-      background: #151d2f; padding: 24px; border-radius: 20px; width: 100%; max-width: 380px;
-      text-align: center; border: 1px solid #243049; box-shadow: 0 15px 35px rgba(0,0,0,0.6);
-    }
-    .logo {
-      width: 50px; height: 50px; background: #5f259f; border-radius: 50%;
-      font-size: 24px; font-weight: bold; color: white; display: inline-flex;
-      align-items: center; justify-content: center; margin-bottom: 10px;
-    }
-    .input-box {
-      width: 100%; box-sizing: border-box; padding: 12px; margin-bottom: 12px;
-      border-radius: 10px; border: 1px solid #334155; background: #0b0f19; color: white; font-size: 16px;
-    }
-    .btn {
-      width: 100%; padding: 12px; border: none; border-radius: 10px;
-      background: #0284c7; color: white; font-size: 16px; font-weight: bold; cursor: pointer;
-    }
-    #pay-box { display: none; margin-top: 15px; border-top: 1px dashed #334155; padding-top: 15px; }
-    .qr-container { background: white; padding: 10px; border-radius: 12px; display: inline-block; margin: 10px 0; }
-    .qr-img { width: 170px; height: 170px; display: block; }
-    
-    /* App Specific Buttons */
-    .app-btn-group { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
-    .app-btn {
-      display: flex; align-items: center; justify-content: center;
-      padding: 12px; border-radius: 10px; text-decoration: none;
-      color: white; font-weight: bold; font-size: 15px; transition: transform 0.1s;
-    }
-    .phonepe-btn { background: #5f259f; }
-    .gpay-btn { background: #1a73e8; }
-    .paytm-btn { background: #00b9f5; color: #0b0f19; font-weight: 800; }
-    
-    .verify-box { margin-top: 18px; background: #0f172a; padding: 15px; border-radius: 12px; }
-    .status-msg { margin-top: 10px; font-size: 14px; font-weight: bold; word-break: break-word; }
-  </style>
-</head>
-<body>
+UPI_ID = "7546982355-1@mbkns"
+NAME = "Rupa Kumari"
+AMT = "100"
 
-  <div class="card">
-    <div class="logo">पे</div>
-    <h2 style="margin: 0;">Rupa Kumari</h2>
-    <p style="color: #94a3b8; font-size: 13px; margin: 5px 0 15px;">7546982355-1@mbkns</p>
+def get_qr():
+    qr = qrcode.QRCode(box_size=8, border=2)
+    qr.add_data(f"upi://pay?pa={UPI_ID}&pn={NAME}&am={AMT}&cu=INR")
+    qr.make(fit=True)
+    buf = io.BytesIO()
+    qr.make_image().save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode()
 
-    <div id="step-1">
-      <input type="number" id="amt" class="input-box" placeholder="Amount (₹)" value="100">
-      <button class="btn" onclick="generateQR()">Pay Now</button>
-    </div>
+QR_IMG = get_qr()
 
-    <div id="pay-box">
-      <div style="font-weight: bold; color: #38bdf8; font-size: 18px;" id="disp-amt"></div>
-      
-      <div class="qr-container">
-        <img id="qr-img" class="qr-img" src="" alt="UPI QR">
-<div style="margin-top:10px;"></div>
-      </div>
-      <p style="font-size: 12px; color: #94a3b8; margin: 0 0 10px;"><div style="margin: 10px auto 14px auto; max-width: 90%; padding: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px; font-size: 12px; color: #cbd5e1; text-align: left;">
-            <span style="color: #38bdf8; font-weight: bold;">💳 Supported Modes:</span><br>
-            • RuPay Credit Card (via UPI Apps)<br>
-            • Debit Card (Linked to UPI)<br>
-            • UPI (PhonePe, GPay, Paytm)
-        </div>
-        
-<button type="button" onclick="saveQrImage()" style="background:#16a34a;color:#fff;padding:8px 16px;border-radius:6px;border:none;font-weight:bold;cursor:pointer;margin:10px auto;display:block;font-size:14px;">📥 Download QR Code</button>
-
-<script>
-function saveQrImage() {
-    var img = document.querySelector("img");
-    if (!img) { alert("QR image not found"); return; }
-    var canvas = document.createElement("canvas");
-    canvas.width = img.naturalWidth || 300;
-    canvas.height = img.naturalHeight || 300;
-    var ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0);
-    var link = document.createElement("a");
-    link.download = "upi_qr.png";
-    link.href = canvas.toDataURL("image/png");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
-</script>
-
-Scan karein ya direct app choose karein:</p>
-
-      <!-- Three Dedicated Buttons -->
-      <div class="app-btn-group">
-        <a id="btn-phonepe" class="app-btn phonepe-btn" href="#">Pay with PhonePe</a>
-        <a id="btn-gpay" class="app-btn gpay-btn" href="#">Pay with Google Pay</a>
-        <a id="btn-paytm" class="app-btn paytm-btn" href="#">Pay with Paytm</a>
-      </div>
-
-      <div class="verify-box">
-        <div style="font-size: 13px; margin-bottom: 8px;">Payment ke baad 12-digit UTR daalein:</div>
-        <input type="text" id="utr-input" class="input-box" placeholder="Enter 12-digit UTR" maxlength="12">
-        <button class="btn" style="background: #16a34a;" onclick="verifyPayment()">Verify Payment</button>
-        <div id="status-msg" class="status-msg"></div>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    let currentAmount = 0;
-
-    async function generateQR() {
-      currentAmount = document.getElementById('amt').value;
-      if (!currentAmount || currentAmount <= 0) return alert("Sahi amount daalein");
-
-      const res = await fetch(`/create_order?amount=${currentAmount}`);
-      const data = await res.json();
-
-      document.getElementById('disp-amt').innerText = `Amount: ₹${data.amount}`;
-      document.getElementById('qr-img').src = data.qr_base64;
-
-      // Setting app specific intent links
-      document.getElementById('btn-phonepe').href = data.phonepe_link;
-      document.getElementById('btn-gpay').href = data.gpay_link;
-      document.getElementById('btn-paytm').href = data.paytm_link;
-
-      document.getElementById('step-1').style.display = 'none';
-      document.getElementById('pay-box').style.display = 'block';
-    }
-
-    async function verifyPayment() {
-      const utr = document.getElementById('utr-input').value.trim();
-      const status = document.getElementById('status-msg');
-
-      if (utr.length < 10) {
-        status.style.color = '#ef4444';
-        status.innerText = "Kripya sahi 12-digit UTR daalein";
-        return;
-      }
-
-      status.style.color = '#f59e0b';
-      status.innerText = "Checking payment status...";
-
-      const res = await fetch(`/verify?utr=${utr}&amount=${currentAmount}`);
-      const data = await res.json();
-
-      if (data.success) {
-        status.style.color = '#22c55e';
-        status.innerText = "SUCCESS: " + data.message;
-      } else {
-        status.style.color = '#ef4444';
-        status.innerText = "FAILED: " + data.message;
-      }
-    }
-  </script>
-
-
-        
-
-
-<script>
-window.addEventListener('load', function() {
-    var qrImg = document.getElementById('qr-img');
-    var btn = document.getElementById('download-btn');
-    if(qrImg && btn) {
-        btn.href = qrImg.src;
-    }
-});
-</script>
-</body>
-</html>
-"""
-
-class GatewayHandler(http.server.SimpleHTTPRequestHandler):
+class H(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
-        url_parts = urlparse(self.path)
-
-        if url_parts.path == "/":
+        p = urlparse(self.path).path
+        if p in ["/", "/pay"]:
             self.send_response(200)
             self.send_header("Content-type", "text/html; charset=utf-8")
             self.end_headers()
-            self.wfile.write(HTML_PAGE.encode("utf-8"))
+            html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>UPI Pay</title>
+    <style>
+        body {{ background:#0f172a; color:#f8fafc; font-family:sans-serif; display:flex; justify-content:center; align-items:center; min-height:100vh; margin:0; padding:15px; box-sizing:border-box; }}
+        .c {{ background:#1e293b; padding:20px; border-radius:15px; max-width:360px; width:100%; text-align:center; border:1px solid #334155; }}
+        .amt {{ font-size:22px; color:#38bdf8; font-weight:bold; margin:10px 0; }}
+        .btn {{ display:block; width:100%; padding:10px; margin:6px 0; border-radius:6px; border:none; color:#fff; font-weight:bold; text-decoration:none; box-sizing:border-box; cursor:pointer; font-size:14px; }}
+        input {{ width:100%; padding:8px; margin:4px 0 10px 0; background:#0f172a; border:1px solid #475569; border-radius:5px; color:#fff; box-sizing:border-box; }}
+        .badge {{ margin: 10px auto; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; font-size: 11px; color: #cbd5e1; text-align: left; }}
+    </style>
+</head>
+<body>
+    <div class="c">
+        <h3>{NAME}</h3>
+        <div style="color:#94a3b8;font-size:12px;">{UPI_ID}</div>
+        <div class="amt">₹{AMT}</div>
+        
+        <div style="background:#fff;padding:8px;display:inline-block;border-radius:8px;">
+            <img id="qrimg" src="data:image/png;base64,{QR_IMG}" style="max-width:180px;display:block;">
+        </div>
+        <br>
+        <button type="button" onclick="downloadQR()" style="background:#16a34a;color:#fff;border:none;padding:6px 12px;border-radius:5px;margin-top:8px;font-weight:bold;cursor:pointer;">📥 Download QR Code</button>
 
-        elif url_parts.path == "/create_order":
-            params = parse_qs(url_parts.query)
-            amount = params.get("amount", ["0"])[0]
+        <div class="badge">
+            <span style="color: #38bdf8; font-weight: bold;">💳 Supported:</span> RuPay Credit Card, Debit Card, & UPI Apps
+        </div>
 
-            # Standard UPI parameters
-            params_str = f"pa={MY_UPI_ID}&pn={MY_NAME.replace(' ', '%20')}&am={amount}&cu=INR&tn=OrderPay"
+        <a class="btn" style="background:#5f259f;" href="phonepe://pay?pa={UPI_ID}&pn={NAME}&am={AMT}&cu=INR">Pay via PhonePe</a>
+        <a class="btn" style="background:#1a73e8;" href="tez://upi/pay?pa={UPI_ID}&pn={NAME}&am={AMT}&cu=INR">Pay via Google Pay</a>
+        <a class="btn" style="background:#00b9f1;" href="paytmmp://pay?pa={UPI_ID}&pn={NAME}&am={AMT}&cu=INR">Pay via Paytm</a>
+
+        <div style="border-top:1px solid #334155;margin-top:15px;padding-top:10px;text-align:left;font-size:12px;">
+            <label>12-Digit UTR Number:</label>
+            <input type="text" id="u" maxlength="12" placeholder="Enter UTR number">
             
-            # Universal UPI URI for QR
-            upi_uri = f"upi://pay?{params_str}"
+            <label>Payment Proof (Screenshot):</label>
+            <input type="file" id="p" accept="image/*">
+            
+            <button class="btn" style="background:#10b981;" onclick="sendProof()">Submit Proof</button>
+            <div id="st" style="margin-top:8px;font-weight:bold;text-align:center;"></div>
+        </div>
+    </div>
 
-            # Specific Intents for Apps
-            phonepe_uri = f"phonepe://pay?{params_str}"
-            gpay_uri = f"tez://upi/pay?{params_str}"
-            paytm_uri = f"paytmmp://pay?{params_str}"
+    <script>
+    function downloadQR() {{
+        var img = document.getElementById('qrimg');
+        var canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || 300;
+        canvas.height = img.naturalHeight || 300;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        var a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = 'upi_qr.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }}
 
-            qr = qrcode.QRCode(box_size=6, border=1)
-            qr.add_data(upi_uri)
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white")
+    function sendProof() {{
+        var u = document.getElementById('u').value.trim();
+        var f = document.getElementById('p').files[0];
+        var s = document.getElementById('st');
+        if (u.length !== 12) {{
+            s.innerHTML = '<span style="color:#ef4444;">12-Digit valid UTR daalein</span>';
+            return;
+        }}
+        if (!f) {{
+            s.innerHTML = '<span style="color:#ef4444;">Screenshot chunein</span>';
+            return;
+        }}
+        s.innerHTML = '<span style="color:#38bdf8;">Uploading proof...</span>';
+        var reader = new FileReader();
+        reader.onload = function() {{
+            fetch('/api/submit', {{
+                method: 'POST',
+                headers: {{ 'Content-Type': 'application/json' }},
+                body: JSON.stringify({{ utr: u, proof: reader.result, amt: '{AMT}' }})
+            }})
+            .then(res => res.json())
+            .then(d => {{
+                if (d.ok) {{
+                    s.innerHTML = '<span style="color:#10b981;">✅ Proof Submitted! Admin verify karenge.</span>';
+                }} else {{
+                    s.innerHTML = '<span style="color:#ef4444;">' + d.msg + '</span>';
+                }}
+            }})
+            .catch(() => {{
+                s.innerHTML = '<span style="color:#ef4444;">Upload error. Dobara koshish karein.</span>';
+            }});
+        }};
+        reader.readAsDataURL(f);
+    }}
+    </script>
+</body>
+</html>"""
+            self.wfile.write(html.encode("utf-8"))
 
-            buffered = io.BytesIO()
-            img.save(buffered, format="PNG")
-            img_str = "data:image/png;base64," + base64.b64encode(buffered.getvalue()).decode()
+        elif p == "/admin":
+            conn = sqlite3.connect(DB_FILE)
+            rows = conn.cursor().execute("SELECT id, utr, amt, proof, status, dt FROM tx ORDER BY id DESC").fetchall()
+            conn.close()
+            
+            trs = ""
+            for r in rows:
+                col = "#10b981" if r[4] == "APPROVED" else ("#ef4444" if r[4] == "REJECTED" else "#f59e0b")
+                im = f'<a href="{r[3]}" target="_blank"><img src="{r[3]}" style="width:60px;max-height:60px;border-radius:4px;"></a>' if r[3] else "-"
+                act = f'<button onclick="act({r[0]},\'APPROVED\')" style="background:#10b981;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;">Approve</button> <button onclick="act({r[0]},\'REJECTED\')" style="background:#ef4444;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;">Reject</button>' if r[4] == "PENDING" else f'<b>{r[4]}</b>'
+                trs += f'<tr style="border-bottom:1px solid #334155;"><td>#{r[0]}</td><td style="font-family:monospace;font-weight:bold;">{r[1]}</td><td>₹{r[2]}</td><td>{im}</td><td style="color:{col};font-weight:bold;">{r[4]}</td><td style="font-size:11px;color:#94a3b8;">{r[5]}</td><td>{act}</td></tr>'
 
-            res = {
-                "amount": amount,
-                "qr_base64": img_str,
-                "phonepe_link": phonepe_uri,
-                "gpay_link": gpay_uri,
-                "paytm_link": paytm_uri
-            }
+            adm = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <style>
+        body {{ background:#0f172a; color:#fff; font-family:sans-serif; padding:15px; margin:0; }}
+        table {{ width:100%; background:#1e293b; border-collapse:collapse; border-radius:8px; overflow:hidden; margin-top:12px; }}
+        th, td {{ padding:10px; text-align:left; }}
+        th {{ background:#334155; font-size:13px; }}
+    </style>
+</head>
+<body>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h3>🛡️ Payment Admin Panel</h3>
+        <button onclick="location.reload()" style="background:#38bdf8;padding:6px 12px;border:none;border-radius:5px;font-weight:bold;cursor:pointer;">Refresh</button>
+    </div>
+    <div style="overflow-x:auto;">
+        <table>
+            <thead><tr><th>ID</th><th>UTR</th><th>Amt</th><th>Proof</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
+            <tbody>{trs if trs else '<tr><td colspan="7" style="text-align:center;padding:20px;">Koi proof jama nahi hua abhi tak.</td></tr>'}</tbody>
+        </table>
+    </div>
+    <script>
+    function act(id, st) {{
+        fetch('/api/action', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify({{ id: id, st: st }})
+        }}).then(() => location.reload());
+    }}
+    </script>
+</body>
+</html>"""
             self.send_response(200)
-            self.send_header("Content-type", "application/json")
+            self.send_header("Content-type", "text/html; charset=utf-8")
             self.end_headers()
-            self.wfile.write(json.dumps(res).encode("utf-8"))
-
-        elif url_parts.path == "/verify":
-            params = parse_qs(url_parts.query)
-            utr = params.get("utr", [""])[0].strip()
-            amount = params.get("amount", ["0"])[0].strip()
-
-            if utr in received_payments:
-                rec_amount = received_payments[utr]
-                if str(rec_amount) == str(amount):
-                    del received_payments[utr]
-                    res = {"success": True, "message": f"Payment Verified! ₹{amount} received."}
-                else:
-                    res = {"success": False, "message": f"UTR match hua par amount alag hai (Expected: ₹{amount}, Found: ₹{rec_amount})"}
-            else:
-                res = {"success": False, "message": "Fake UTR ya payment abhi bank me nahi aayi hai."}
-
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
+            self.wfile.write(adm.encode("utf-8"))
+        else:
+            self.send_response(404)
             self.end_headers()
-            self.wfile.write(json.dumps(res).encode("utf-8"))
 
     def do_POST(self):
-        if self.path == '/api/bank-sms':
-            content_length = int(self.headers.get('Content-Length', 0))
-            post_data = self.rfile.read(content_length)
+        l = int(self.headers.get("Content-Length", 0))
+        d = json.loads(self.rfile.read(l).decode("utf-8")) if l else {}
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        if self.path == "/api/submit":
             try:
-                payload = json.loads(post_data.decode('utf-8'))
-                sms_text = payload.get('message', '')
-                utr_match = re.search(r'\d{12}', sms_text)
-                if utr_match:
-                    utr = utr_match.group(0)
-                    received_payments[utr] = {'status': 'SUCCESS', 'raw': sms_text}
-                self.send_response(200)
-                self.send_header('Content-type', 'application/json')
-                self.end_headers()
-                self.wfile.write(b'{"status":"ok"}')
-            except Exception:
-                self.send_response(400)
-                self.end_headers()
-
-        if self.path == "/sms_hook":
-            length = int(self.headers.get('Content-Length', 0))
-            body = self.rfile.read(length).decode('utf-8')
-            
-            print(f"[Incoming Bank Alert]: {body}")
-            utr_match = re.search(r'\b\d{12}\b', body)
-            amt_match = re.search(r'(?:rs\.?|inr)\s*([\d\.]+)', body, re.IGNORECASE)
-            
-            if utr_match and amt_match:
-                utr = utr_match.group(0)
-                amt = amt_match.group(1).split('.')[0]
-                received_payments[utr] = amt
-                print(f"[PAYMENT LOGGED]: UTR={utr}, Amount=₹{amt}")
-            
+                c.execute("INSERT INTO tx (utr, amt, proof, status, dt) VALUES (?, ?, ?, 'PENDING', ?)",
+                          (d.get("utr"), d.get("amt"), d.get("proof"), datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                conn.commit()
+                res = {"ok": True}
+            except sqlite3.IntegrityError:
+                res = {"ok": False, "msg": "Yeh UTR pehle se darj hai!"}
             self.send_response(200)
+            self.send_header("Content-type", "application/json")
             self.end_headers()
-            self.wfile.write(b"OK")
+            self.wfile.write(json.dumps(res).encode("utf-8"))
+        elif self.path == "/api/action":
+            c.execute("UPDATE tx SET status=? WHERE id=?", (d.get("st"), d.get("id")))
+            conn.commit()
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"ok":true}')
+        conn.close()
 
-socketserver.TCPServer.allow_reuse_address = True
-print(f"Gateway running on http://localhost:{PORT}")
-with socketserver.TCPServer(("", PORT), GatewayHandler) as httpd:
-    httpd.serve_forever()
+print(f"Server starting on port {PORT}")
+with socketserver.TCPServer(("", PORT), H) as s:
+    s.serve_forever()
