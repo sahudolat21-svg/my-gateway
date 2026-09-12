@@ -1,9 +1,6 @@
 import http.server
 import socketserver
 import json
-import qrcode
-import io
-import base64
 import os
 import sqlite3
 from datetime import datetime
@@ -33,53 +30,49 @@ init_db()
 
 UPI_ID = "7546982355-1@mbkns"
 NAME = "Rupa Kumari"
-AMT = "100"
-
-def get_qr():
-    qr = qrcode.QRCode(box_size=8, border=2)
-    qr.add_data(f"upi://pay?pa={UPI_ID}&pn={NAME}&am={AMT}&cu=INR")
-    qr.make(fit=True)
-    buf = io.BytesIO()
-    qr.make_image().save(buf, format="PNG")
-    return base64.b64encode(buf.getvalue()).decode()
-
-QR_IMG = get_qr()
 
 PAY_PAGE = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>UPI Checkout</title>
+    <!-- Lightweight QR Library for instant real-time dynamic QR generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         * {{ touch-action: manipulation; -webkit-text-size-adjust: 100%; box-sizing: border-box; }}
         body {{ background:#0f172a; color:#f8fafc; font-family:sans-serif; display:flex; justify-content:center; align-items:center; min-height:100vh; margin:0; padding:15px; }}
         .c {{ background:#1e293b; padding:20px; border-radius:15px; max-width:360px; width:100%; text-align:center; border:1px solid #334155; }}
-        .amt {{ font-size:22px; color:#38bdf8; font-weight:bold; margin:10px 0; }}
-        .btn {{ display:block; width:100%; padding:12px; margin:6px 0; border-radius:6px; border:none; color:#fff; font-weight:bold; text-decoration:none; cursor:pointer; font-size:15px; }}
+        .amt-box {{ margin:12px 0; text-align:left; }}
+        .amt-box label {{ font-size:13px; color:#94a3b8; font-weight:bold; }}
+        .amt-input {{ width:100%; padding:12px; margin-top:5px; background:#0f172a; border:2px solid #38bdf8; border-radius:8px; color:#38bdf8; font-size:20px !important; font-weight:bold; text-align:center; }}
+        .btn {{ display:block; width:100%; padding:12px; margin:6px 0; border-radius:6px; border:none; color:#fff; font-weight:bold; text-decoration:none; cursor:pointer; font-size:15px; text-align:center; }}
         input {{ width:100%; padding:12px; margin:6px 0 12px 0; background:#0f172a; border:1px solid #475569; border-radius:5px; color:#fff; font-size:16px !important; }}
         .badge {{ margin: 10px auto; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; font-size: 11px; color: #cbd5e1; text-align: left; }}
         #success-modal {{ display:none; background:#064e3b; border:1px solid #10b981; padding:15px; border-radius:10px; margin-top:15px; }}
+        #qrcode {{ display:flex; justify-content:center; margin:10px auto; background:#fff; padding:10px; border-radius:8px; width:fit-content; }}
     </style>
 </head>
 <body>
     <div class="c">
-        <h3>{NAME}</h3>
-        <div style="color:#94a3b8;font-size:12px;">{UPI_ID}</div>
-        <div class="amt">₹{AMT}</div>
+        <h3 style="margin:0;">{NAME}</h3>
+        <div style="color:#94a3b8;font-size:12px;margin-top:4px;">{UPI_ID}</div>
         
-        <div style="background:#fff;padding:8px;display:inline-block;border-radius:8px;">
-            <img id="qrimg" src="data:image/png;base64,{QR_IMG}" style="max-width:170px;display:block;">
+        <!-- Amount Input Box -->
+        <div class="amt-box">
+            <label>Amount (₹):</label>
+            <input type="number" id="amtInput" class="amt-input" value="100" min="1" oninput="updatePaymentLinks()">
         </div>
-        <br>
+        
+        <div id="qrcode"></div>
         <button type="button" onclick="downloadQR()" style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:5px;margin-top:8px;font-weight:bold;cursor:pointer;">📥 Download QR Code</button>
 
         <div class="badge">
             <span style="color: #38bdf8; font-weight: bold;">💳 Supported:</span> RuPay Credit Card, Debit Card & UPI Apps
         </div>
 
-        <a class="btn" style="background:#5f259f;" href="phonepe://pay?pa={UPI_ID}&pn={NAME}&am={AMT}&cu=INR">Pay via PhonePe</a>
-        <a class="btn" style="background:#1a73e8;" href="tez://upi/pay?pa={UPI_ID}&pn={NAME}&am={AMT}&cu=INR">Pay via Google Pay</a>
-        <a class="btn" style="background:#00b9f1;" href="paytmmp://pay?pa={UPI_ID}&pn={NAME}&am={AMT}&cu=INR">Pay via Paytm</a>
+        <a id="btnPhonePe" class="btn" style="background:#5f259f;" href="#">Pay via PhonePe</a>
+        <a id="btnGPay" class="btn" style="background:#1a73e8;" href="#">Pay via Google Pay</a>
+        <a id="btnPaytm" class="btn" style="background:#00b9f1;" href="#">Pay via Paytm</a>
 
         <div id="form-container" style="border-top:1px solid #334155;margin-top:15px;padding-top:10px;text-align:left;font-size:12px;">
             <label>12-Digit UTR Number:</label>
@@ -99,17 +92,38 @@ PAY_PAGE = f"""<!DOCTYPE html>
     </div>
 
     <script>
+    var upiId = "{UPI_ID}";
+    var name = "{NAME}";
+    var qrObj = null;
     var currentUtr = "";
     var checkTimer = null;
 
+    function updatePaymentLinks() {{
+        var amt = document.getElementById('amtInput').value.trim() || "1";
+        var upiUri = "upi://pay?pa=" + encodeURIComponent(upiId) + "&pn=" + encodeURIComponent(name) + "&am=" + amt + "&cu=INR";
+
+        document.getElementById('btnPhonePe').href = "phonepe://pay?pa=" + encodeURIComponent(upiId) + "&pn=" + encodeURIComponent(name) + "&am=" + amt + "&cu=INR";
+        document.getElementById('btnGPay').href = "tez://upi/pay?pa=" + encodeURIComponent(upiId) + "&pn=" + encodeURIComponent(name) + "&am=" + amt + "&cu=INR";
+        document.getElementById('btnPaytm').href = "paytmmp://pay?pa=" + encodeURIComponent(upiId) + "&pn=" + encodeURIComponent(name) + "&am=" + amt + "&cu=INR";
+
+        var qrDiv = document.getElementById('qrcode');
+        qrDiv.innerHTML = "";
+        qrObj = new QRCode(qrDiv, {{
+            text: upiUri,
+            width: 170,
+            height: 170,
+            correctLevel: QRCode.CorrectLevel.M
+        }});
+    }}
+
+    // Init with default amount
+    updatePaymentLinks();
+
     function downloadQR() {{
-        var img = document.getElementById('qrimg');
-        var canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth || 300;
-        canvas.height = img.naturalHeight || 300;
-        canvas.getContext('2d').drawImage(img, 0, 0);
+        var img = document.querySelector('#qrcode img');
+        if (!img || !img.src) return;
         var a = document.createElement('a');
-        a.href = canvas.toDataURL('image/png');
+        a.href = img.src;
         a.download = 'upi_qr.png';
         a.click();
     }}
@@ -117,6 +131,7 @@ PAY_PAGE = f"""<!DOCTYPE html>
     function sendProof() {{
         var u = document.getElementById('u').value.trim();
         var f = document.getElementById('p').files[0];
+        var amt = document.getElementById('amtInput').value.trim() || "100";
         var s = document.getElementById('st');
         if (u.length !== 12) {{
             s.innerHTML = '<span style="color:#ef4444;">12-Digit valid UTR daalein</span>';
@@ -133,7 +148,7 @@ PAY_PAGE = f"""<!DOCTYPE html>
             fetch('/api/submit', {{
                 method: 'POST',
                 headers: {{ 'Content-Type': 'application/json' }},
-                body: JSON.stringify({{ utr: u, proof: reader.result, amt: '{AMT}' }})
+                body: JSON.stringify({{ utr: u, proof: reader.result, amt: amt }})
             }})
             .then(res => res.json())
             .then(d => {{
