@@ -372,19 +372,16 @@ class H(http.server.SimpleHTTPRequestHandler):
             today_str = datetime.now().strftime("%Y-%m-%d")
 
             conn = sqlite3.connect(DB_FILE)
-            # Today's 24H Stats (Reset every day)
             day_rev = conn.cursor().execute("SELECT SUM(CAST(amt AS REAL)) FROM tx WHERE status='APPROVED' AND dt LIKE ?", (f"{today_str}%",)).fetchone()[0] or 0
             day_app = conn.cursor().execute("SELECT COUNT(*) FROM tx WHERE status='APPROVED' AND dt LIKE ?", (f"{today_str}%",)).fetchone()[0] or 0
             day_rej = conn.cursor().execute("SELECT COUNT(*) FROM tx WHERE status='REJECTED' AND dt LIKE ?", (f"{today_str}%",)).fetchone()[0] or 0
             day_pend = conn.cursor().execute("SELECT COUNT(*) FROM tx WHERE status='PENDING' AND dt LIKE ?", (f"{today_str}%",)).fetchone()[0] or 0
 
-            # All-time stats for the records modal
             all_rev = conn.cursor().execute("SELECT SUM(CAST(amt AS REAL)) FROM tx WHERE status='APPROVED'").fetchone()[0] or 0
             all_app = conn.cursor().execute("SELECT COUNT(*) FROM tx WHERE status='APPROVED'").fetchone()[0] or 0
             all_rej = conn.cursor().execute("SELECT COUNT(*) FROM tx WHERE status='REJECTED'").fetchone()[0] or 0
             all_pend = conn.cursor().execute("SELECT COUNT(*) FROM tx WHERE status='PENDING'").fetchone()[0] or 0
 
-            # All transactions for all-day record view
             all_rows = conn.cursor().execute("SELECT id, utr, amt, status, dt FROM tx ORDER BY id DESC").fetchall()
             conn.close()
 
@@ -404,6 +401,9 @@ class H(http.server.SimpleHTTPRequestHandler):
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Owner Control Panel</title>
+    <!-- jsPDF and AutoTable libraries for direct PDF download -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <style>
         * {{ touch-action: manipulation; -webkit-text-size-adjust: 100%; box-sizing: border-box; }}
         body {{ background:#090d16; color:#f8fafc; font-family:sans-serif; padding:15px; margin:0; }}
@@ -415,9 +415,8 @@ class H(http.server.SimpleHTTPRequestHandler):
         label {{ font-size:12px; color:#94a3b8; font-weight:bold; }}
         button {{ width:100%; padding:12px; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:15px; }}
         
-        /* All Records Modal */
         #allRecordsModal {{ display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.92); justify-content:center; align-items:center; padding:15px; }}
-        .modal-content {{ background:#1e293b; width:100%; max-width:650px; max-height:88vh; border-radius:12px; border:1px solid #38bdf8; display:flex; flex-direction:column; padding:18px; }}
+        .modal-content {{ background:#1e293b; width:100%; max-width:650px; max-height:92vh; border-radius:12px; border:1px solid #38bdf8; display:flex; flex-direction:column; padding:18px; }}
     </style>
 </head>
 <body>
@@ -429,7 +428,7 @@ class H(http.server.SimpleHTTPRequestHandler):
         <button onclick="document.cookie='owner_auth=; Max-Age=0; path=/;';location.href='/owner/login';" style="background:#ef4444;color:#fff;width:auto;padding:8px 14px;">Logout</button>
     </div>
 
-    <!-- 24H Today Analytics (4 Cards including Rejected) -->
+    <!-- 24H Today Analytics -->
     <div class="grid">
         <div class="stat"><div style="font-size:11px;color:#94a3b8;">Today's Revenue</div><div class="stat-val" style="color:#10b981;">₹{day_rev:,.0f}</div></div>
         <div class="stat"><div style="font-size:11px;color:#94a3b8;">Approved Orders</div><div class="stat-val" style="color:#38bdf8;">{day_app}</div></div>
@@ -495,7 +494,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             </div>
 
             <div style="overflow-y:auto;flex:1;background:#0f172a;border-radius:8px;border:1px solid #334155;">
-                <table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;">
+                <table id="recordsTable" style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;">
                     <thead style="background:#1e293b;position:sticky;top:0;">
                         <tr><th style="padding:8px;">ID</th><th>UTR</th><th>Amt</th><th>Status</th><th>Date</th></tr>
                     </thead>
@@ -505,17 +504,85 @@ class H(http.server.SimpleHTTPRequestHandler):
                 </table>
             </div>
 
-            <button onclick="closeAllRecords()" style="margin-top:12px;background:#475569;color:#fff;padding:10px;">Close Records</button>
+            <!-- Action Buttons -->
+            <button onclick="closeAllRecords()" style="margin-top:12px;background:#475569;color:#fff;padding:11px;">Close Records</button>
+            <button onclick="downloadPDF()" style="margin-top:8px;background:#10b981;color:#fff;padding:12px;font-weight:bold;display:flex;justify-content:center;align-items:center;gap:8px;">
+                📥 Download Record PDF
+            </button>
         </div>
     </div>
 
     <script>
+    var lifetimeRevenue = "{all_rev:,.0f}";
+    var lifetimeApproved = "{all_app}";
+    var lifetimePending = "{all_pend}";
+    var lifetimeRejected = "{all_rej}";
+
     function openAllRecords() {{
         document.getElementById('allRecordsModal').style.display = 'flex';
     }}
     function closeAllRecords() {{
         document.getElementById('allRecordsModal').style.display = 'none';
     }}
+
+    function downloadPDF() {{
+        var btn = event.target;
+        var originalText = btn.innerHTML;
+        btn.innerText = "⏳ Generating PDF...";
+        btn.disabled = true;
+
+        try {{
+            const {{ jsPDF }} = window.jspdf;
+            const doc = new jsPDF();
+
+            // Header Title
+            doc.setFontSize(18);
+            doc.setTextColor(30, 41, 59);
+            doc.text("Payment Gateway - Lifetime Records", 14, 18);
+
+            // Subtitle & Date
+            doc.setFontSize(10);
+            doc.setTextColor(100, 116, 139);
+            var now = new Date();
+            var dateStr = now.toLocaleDateString() + ' ' + now.toLocaleTimeString();
+            doc.text("Generated on: " + dateStr, 14, 25);
+
+            // Summary Analytics Box
+            doc.autoTable({{
+                startY: 30,
+                head: [['Metric', 'Value']],
+                body: [
+                    ['Total Lifetime Revenue', 'Rs. ' + lifetimeRevenue],
+                    ['Total Approved Orders', lifetimeApproved],
+                    ['Total Pending Orders', lifetimePending],
+                    ['Total Rejected Orders', lifetimeRejected]
+                ],
+                theme: 'grid',
+                styles: {{ fontSize: 10, cellPadding: 3 }},
+                headStyles: {{ fillColor: [56, 189, 248], textColor: 255, fontStyle: 'bold' }},
+                margin: {{ left: 14, right: 14 }}
+            }});
+
+            // Detailed Transactions Table
+            doc.autoTable({{
+                html: '#recordsTable',
+                startY: doc.lastAutoTable.finalY + 10,
+                styles: {{ fontSize: 9, cellPadding: 3 }},
+                headStyles: {{ fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' }},
+                alternateRowStyles: {{ fillColor: [248, 250, 252] }},
+                margin: {{ left: 14, right: 14 }}
+            }});
+
+            var fileName = "payment_records_" + now.toISOString().slice(0, 10) + ".pdf";
+            doc.save(fileName);
+        }} catch(e) {{
+            alert("PDF generate karne me error aaya: " + e.message);
+        }} finally {{
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }}
+    }}
+
     function postSetting(data) {{
         fetch('/api/owner/save-settings', {{
             method: 'POST',
