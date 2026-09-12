@@ -24,22 +24,41 @@ def init_db():
         key TEXT PRIMARY KEY,
         val TEXT
     )""")
-    c.execute("INSERT OR IGNORE INTO settings (key, val) VALUES ('upi_id', '7546982355-1@mbkns')")
-    c.execute("INSERT OR IGNORE INTO settings (key, val) VALUES ('receiver_name', 'Rupa Kumari')")
-    c.execute("INSERT OR IGNORE INTO settings (key, val) VALUES ('admin_user', '7546982355')")
-    c.execute("INSERT OR IGNORE INTO settings (key, val) VALUES ('admin_pass', '7546982355')")
-    c.execute("INSERT OR IGNORE INTO settings (key, val) VALUES ('owner_user', 'owner7546')")
-    c.execute("INSERT OR IGNORE INTO settings (key, val) VALUES ('owner_pass', 'owner7546')")
+    
+    # Default settings
+    defaults = {
+        'upi_id': '7546982355-1@mbkns',
+        'receiver_name': 'Rupa Kumari',
+        'admin_user': '7546982355',
+        'admin_pass': '7546982355',
+        'owner_user': 'owner7546',
+        'owner_pass': 'owner7546',
+        # User Customization
+        'user_page_title': 'UPI Checkout',
+        'user_bg_color': '#0f172a',
+        'user_card_color': '#1e293b',
+        'user_btn_color': '#0284c7',
+        'user_badge_text': '💳 Supported: RuPay Credit Card, Debit Card & UPI Apps',
+        'user_success_msg': 'Aapka payment verify aur approve kar diya gaya hai.',
+        # Admin Customization
+        'admin_title': '🛡️ Payment Admin Panel',
+        'admin_bg_color': '#0f172a',
+        'admin_table_head': '#334155',
+        'admin_btn_color': '#38bdf8'
+    }
+    for k, v in defaults.items():
+        c.execute("INSERT OR IGNORE INTO settings (key, val) VALUES (?, ?)", (k, v))
+    
     conn.commit()
     conn.close()
 
 init_db()
 
-def get_setting(key):
+def get_setting(key, default=""):
     conn = sqlite3.connect(DB_FILE)
     r = conn.cursor().execute("SELECT val FROM settings WHERE key=?", (key,)).fetchone()
     conn.close()
-    return r[0] if r else ""
+    return r[0] if r and r[0] is not None else default
 
 def set_setting(key, val):
     conn = sqlite3.connect(DB_FILE)
@@ -48,21 +67,28 @@ def set_setting(key, val):
     conn.close()
 
 def render_pay_page():
-    upi_id = get_setting("upi_id")
-    name = get_setting("receiver_name")
+    upi_id = get_setting("upi_id", "7546982355-1@mbkns")
+    name = get_setting("receiver_name", "Rupa Kumari")
+    page_title = get_setting("user_page_title", "UPI Checkout")
+    bg_col = get_setting("user_bg_color", "#0f172a")
+    card_col = get_setting("user_card_color", "#1e293b")
+    btn_col = get_setting("user_btn_color", "#0284c7")
+    badge_text = get_setting("user_badge_text", "💳 Supported: RuPay Credit Card, Debit Card & UPI Apps")
+    success_msg = get_setting("user_success_msg", "Aapka payment verify aur approve kar diya gaya hai.")
+
     return f"""<!DOCTYPE html>
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>UPI Checkout</title>
+    <title>{page_title}</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         * {{ touch-action: manipulation; -webkit-text-size-adjust: 100%; box-sizing: border-box; }}
-        body {{ background:#0f172a; color:#f8fafc; font-family:sans-serif; display:flex; justify-content:center; align-items:center; min-height:100vh; margin:0; padding:15px; }}
-        .c {{ background:#1e293b; padding:22px; border-radius:16px; max-width:360px; width:100%; text-align:center; border:1px solid #334155; }}
+        body {{ background:{bg_col}; color:#f8fafc; font-family:sans-serif; display:flex; justify-content:center; align-items:center; min-height:100vh; margin:0; padding:15px; }}
+        .c {{ background:{card_col}; padding:22px; border-radius:16px; max-width:360px; width:100%; text-align:center; border:1px solid rgba(255,255,255,0.1); box-shadow:0 8px 24px rgba(0,0,0,0.3); }}
         .amt-box {{ margin:15px 0; text-align:left; }}
         .amt-box label {{ font-size:13px; color:#94a3b8; font-weight:bold; }}
-        .amt-input {{ width:100%; padding:14px; margin-top:6px; background:#0f172a; border:2px solid #38bdf8; border-radius:8px; color:#38bdf8; font-size:22px !important; font-weight:bold; text-align:center; }}
+        .amt-input {{ width:100%; padding:14px; margin-top:6px; background:#0f172a; border:2px solid {btn_col}; border-radius:8px; color:{btn_col}; font-size:22px !important; font-weight:bold; text-align:center; }}
         .btn {{ display:block; width:100%; padding:12px; margin:6px 0; border-radius:6px; border:none; color:#fff; font-weight:bold; text-decoration:none; cursor:pointer; font-size:15px; text-align:center; }}
         input {{ width:100%; padding:12px; margin:6px 0 12px 0; background:#0f172a; border:1px solid #475569; border-radius:5px; color:#fff; font-size:16px !important; }}
         .badge {{ margin: 10px auto; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; font-size: 11px; color: #cbd5e1; text-align: left; }}
@@ -81,28 +107,26 @@ def render_pay_page():
                 <label>Enter Amount (₹):</label>
                 <input type="number" id="amtInput" class="amt-input" placeholder="Enter amount" min="1">
             </div>
-            <button class="btn" style="background:#0284c7;font-size:16px;padding:14px;" onclick="proceedToPay()">Proceed to Pay ➔</button>
+            <button class="btn" style="background:{btn_col};font-size:16px;padding:14px;" onclick="proceedToPay()">Proceed to Pay ➔</button>
             <div id="step1-err" style="color:#ef4444;font-size:13px;margin-top:8px;"></div>
         </div>
 
         <div id="step2">
             <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 6px 0;">
-                <span id="displayAmt" style="font-size:20px;color:#38bdf8;font-weight:bold;">₹0</span>
+                <span id="displayAmt" style="font-size:20px;color:{btn_col};font-weight:bold;">₹0</span>
                 <button onclick="changeAmt()" style="background:transparent;border:1px solid #64748b;color:#94a3b8;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px;">Edit Amount</button>
             </div>
 
             <div id="qrcode"></div>
             <button type="button" onclick="downloadQR()" style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:5px;margin-top:6px;font-weight:bold;cursor:pointer;">📥 Download QR Code</button>
 
-            <div class="badge">
-                <span style="color: #38bdf8; font-weight: bold;">💳 Supported:</span> RuPay Credit Card, Debit Card & UPI Apps
-            </div>
+            <div class="badge">{badge_text}</div>
 
             <a id="btnPhonePe" class="btn" style="background:#5f259f;" href="#">Pay via PhonePe</a>
             <a id="btnGPay" class="btn" style="background:#1a73e8;" href="#">Pay via Google Pay</a>
             <a id="btnPaytm" class="btn" style="background:#00b9f1;" href="#">Pay via Paytm</a>
 
-            <div id="form-container" style="border-top:1px solid #334155;margin-top:15px;padding-top:10px;text-align:left;font-size:12px;">
+            <div id="form-container" style="border-top:1px solid rgba(255,255,255,0.1);margin-top:15px;padding-top:10px;text-align:left;font-size:12px;">
                 <label>12-Digit UTR Number:</label>
                 <input type="text" id="u" maxlength="12" placeholder="Enter 12-digit UTR">
                 
@@ -116,7 +140,7 @@ def render_pay_page():
 
         <div id="success-modal">
             <h2 style="color:#34d399;margin:0 0 8px 0;">🎉 Payment Successful!</h2>
-            <p style="margin:0;font-size:13px;color:#e2e8f0;">Aapka payment verify aur approve kar diya gaya hai.</p>
+            <p style="margin:0;font-size:13px;color:#e2e8f0;">{success_msg}</p>
         </div>
     </div>
 
@@ -299,6 +323,11 @@ class H(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 return
 
+            admin_title = get_setting("admin_title", "🛡️ Payment Admin Panel")
+            admin_bg = get_setting("admin_bg_color", "#0f172a")
+            admin_th = get_setting("admin_table_head", "#334155")
+            admin_btn = get_setting("admin_btn_color", "#38bdf8")
+
             conn = sqlite3.connect(DB_FILE)
             rows = conn.cursor().execute("SELECT id, utr, amt, proof, status, dt FROM tx ORDER BY id DESC").fetchall()
             conn.close()
@@ -315,23 +344,23 @@ class H(http.server.SimpleHTTPRequestHandler):
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Admin Dashboard</title>
+    <title>{admin_title}</title>
     <style>
         * {{ touch-action: manipulation; -webkit-text-size-adjust: 100%; box-sizing: border-box; }}
-        body {{ background:#0f172a; color:#fff; font-family:sans-serif; padding:15px; margin:0; }}
+        body {{ background:{admin_bg}; color:#fff; font-family:sans-serif; padding:15px; margin:0; }}
         table {{ width:100%; background:#1e293b; border-collapse:collapse; border-radius:8px; overflow:hidden; margin-top:12px; }}
         th, td {{ padding:10px; text-align:left; }}
-        th {{ background:#334155; font-size:13px; }}
+        th {{ background:{admin_th}; font-size:13px; }}
         #imgModal {{ display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.9); justify-content:center; align-items:center; padding:15px; }}
-        #imgModal img {{ max-width:95%; max-height:85vh; border-radius:8px; border:2px solid #38bdf8; object-fit:contain; }}
+        #imgModal img {{ max-width:95%; max-height:85vh; border-radius:8px; border:2px solid {admin_btn}; object-fit:contain; }}
         #closeModal {{ position:absolute; top:20px; right:25px; color:#fff; font-size:32px; font-weight:bold; cursor:pointer; background:rgba(255,255,255,0.2); width:40px; height:40px; line-height:36px; text-align:center; border-radius:50%; }}
     </style>
 </head>
 <body>
     <div style="display:flex;justify-content:space-between;align-items:center;">
-        <h3>🛡️ Payment Admin Panel</h3>
+        <h3>{admin_title}</h3>
         <div>
-            <button onclick="location.reload()" style="background:#38bdf8;padding:8px 14px;border:none;border-radius:5px;font-weight:bold;cursor:pointer;">Refresh</button>
+            <button onclick="location.reload()" style="background:{admin_btn};padding:8px 14px;border:none;border-radius:5px;font-weight:bold;cursor:pointer;color:#000;">Refresh</button>
             <button onclick="document.cookie='admin_auth=; Max-Age=0; path=/;';location.href='/admin/login';" style="background:#ef4444;color:#fff;padding:8px 14px;border:none;border-radius:5px;cursor:pointer;margin-left:5px;">Logout</button>
         </div>
     </div>
@@ -391,6 +420,19 @@ class H(http.server.SimpleHTTPRequestHandler):
             admin_pass = get_setting("admin_pass")
             owner_user = get_setting("owner_user")
 
+            # Customization Settings
+            u_title = get_setting("user_page_title", "UPI Checkout")
+            u_bg = get_setting("user_bg_color", "#0f172a")
+            u_card = get_setting("user_card_color", "#1e293b")
+            u_btn = get_setting("user_btn_color", "#0284c7")
+            u_badge = get_setting("user_badge_text", "💳 Supported: RuPay Credit Card, Debit Card & UPI Apps")
+            u_msg = get_setting("user_success_msg", "Aapka payment verify aur approve kar diya gaya hai.")
+
+            adm_title = get_setting("admin_title", "🛡️ Payment Admin Panel")
+            adm_bg = get_setting("admin_bg_color", "#0f172a")
+            adm_th = get_setting("admin_table_head", "#334155")
+            adm_btn = get_setting("admin_btn_color", "#38bdf8")
+
             all_trs_html = ""
             for r in all_rows:
                 col = "#10b981" if r[3] == "APPROVED" else ("#ef4444" if r[3] == "REJECTED" else "#f59e0b")
@@ -401,7 +443,6 @@ class H(http.server.SimpleHTTPRequestHandler):
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Owner Control Panel</title>
-    <!-- jsPDF and AutoTable libraries for direct PDF download -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <style>
@@ -411,7 +452,9 @@ class H(http.server.SimpleHTTPRequestHandler):
         .grid {{ display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; margin-bottom:15px; }}
         .stat {{ background:#0f172a; padding:14px; border-radius:10px; border:1px solid #1e293b; text-align:center; }}
         .stat-val {{ font-size:22px; font-weight:bold; margin-top:4px; }}
-        input {{ width:100%; padding:12px; margin:6px 0 12px 0; background:#0f172a; border:1px solid #475569; border-radius:6px; color:#fff; font-size:16px !important; }}
+        input[type="text"], input[type="password"] {{ width:100%; padding:12px; margin:6px 0 12px 0; background:#0f172a; border:1px solid #475569; border-radius:6px; color:#fff; font-size:16px !important; }}
+        .color-row {{ display:flex; align-items:center; justify-content:space-between; margin:8px 0 12px 0; background:#0f172a; padding:8px 12px; border-radius:6px; border:1px solid #475569; }}
+        .color-row input[type="color"] {{ border:none; width:45px; height:35px; border-radius:4px; cursor:pointer; background:transparent; }}
         label {{ font-size:12px; color:#94a3b8; font-weight:bold; }}
         button {{ width:100%; padding:12px; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:15px; }}
         
@@ -473,9 +516,51 @@ class H(http.server.SimpleHTTPRequestHandler):
         <button style="background:#d97706;color:#fff;" onclick="saveOwner()">Update Owner Password</button>
     </div>
 
+    <!-- 1. CUSTOMIZE USER PANEL (NEW) -->
+    <div class="card" style="border-left:4px solid #10b981;">
+        <h3 style="margin:0 0 12px 0;color:#10b981;">🎨 Customize User Panel</h3>
+        <label>Page Title / Header:</label>
+        <input type="text" id="user_page_title" value="{u_title}">
+        
+        <label>Background Color (Tap color box):</label>
+        <div class="color-row"><span>Background Color</span><input type="color" id="user_bg_color" value="{u_bg}"></div>
+
+        <label>Card Box Color:</label>
+        <div class="color-row"><span>Card Color</span><input type="color" id="user_card_color" value="{u_card}"></div>
+
+        <label>Accent / Button Color:</label>
+        <div class="color-row"><span>Button Color</span><input type="color" id="user_btn_color" value="{u_btn}"></div>
+
+        <label>Supported Cards Badge Text:</label>
+        <input type="text" id="user_badge_text" value="{u_badge}">
+
+        <label>Payment Success Message:</label>
+        <input type="text" id="user_success_msg" value="{u_msg}">
+
+        <button style="background:#10b981;color:#fff;" onclick="saveUserCustomization()">💾 Save User Panel Theme</button>
+    </div>
+
+    <!-- 2. CUSTOMIZE ADMIN PANEL (NEW) -->
+    <div class="card" style="border-left:4px solid #38bdf8;">
+        <h3 style="margin:0 0 12px 0;color:#38bdf8;">⚙️ Customize Admin Panel</h3>
+        <label>Admin Panel Title:</label>
+        <input type="text" id="admin_title" value="{adm_title}">
+
+        <label>Admin Background Color:</label>
+        <div class="color-row"><span>Background Color</span><input type="color" id="admin_bg_color" value="{adm_bg}"></div>
+
+        <label>Table Header Color:</label>
+        <div class="color-row"><span>Header Color</span><input type="color" id="admin_table_head" value="{adm_th}"></div>
+
+        <label>Refresh Button Color:</label>
+        <div class="color-row"><span>Refresh Button Color</span><input type="color" id="admin_btn_color" value="{adm_btn}"></div>
+
+        <button style="background:#0284c7;color:#fff;" onclick="saveAdminCustomization()">💾 Save Admin Panel Theme</button>
+    </div>
+
     <div style="text-align:center;margin:20px 0;">
-        <a href="/admin" style="color:#38bdf8;font-size:14px;text-decoration:none;margin-right:15px;">➔ Go to Admin Panel</a>
-        <a href="/" target="_blank" style="color:#10b981;font-size:14px;text-decoration:none;">➔ View User Checkout Page</a>
+        <a href="/admin" target="_blank" style="color:#38bdf8;font-size:14px;text-decoration:none;margin-right:15px;">➔ Open Admin Panel</a>
+        <a href="/" target="_blank" style="color:#10b981;font-size:14px;text-decoration:none;">➔ Open User Checkout Page</a>
     </div>
 
     <!-- Fullscreen All-Time Records Modal -->
@@ -504,7 +589,6 @@ class H(http.server.SimpleHTTPRequestHandler):
                 </table>
             </div>
 
-            <!-- Action Buttons -->
             <button onclick="closeAllRecords()" style="margin-top:12px;background:#475569;color:#fff;padding:11px;">Close Records</button>
             <button onclick="downloadPDF()" style="margin-top:8px;background:#10b981;color:#fff;padding:12px;font-weight:bold;display:flex;justify-content:center;align-items:center;gap:8px;">
                 📥 Download Record PDF
@@ -535,19 +619,16 @@ class H(http.server.SimpleHTTPRequestHandler):
             const {{ jsPDF }} = window.jspdf;
             const doc = new jsPDF();
 
-            // Header Title
             doc.setFontSize(18);
             doc.setTextColor(30, 41, 59);
             doc.text("Payment Gateway - Lifetime Records", 14, 18);
 
-            // Subtitle & Date
             doc.setFontSize(10);
             doc.setTextColor(100, 116, 139);
             var now = new Date();
             var dateStr = now.toLocaleDateString() + ' ' + now.toLocaleTimeString();
             doc.text("Generated on: " + dateStr, 14, 25);
 
-            // Summary Analytics Box
             doc.autoTable({{
                 startY: 30,
                 head: [['Metric', 'Value']],
@@ -563,7 +644,6 @@ class H(http.server.SimpleHTTPRequestHandler):
                 margin: {{ left: 14, right: 14 }}
             }});
 
-            // Detailed Transactions Table
             doc.autoTable({{
                 html: '#recordsTable',
                 startY: doc.lastAutoTable.finalY + 10,
@@ -604,6 +684,26 @@ class H(http.server.SimpleHTTPRequestHandler):
         var u = document.getElementById('owner_user').value.trim();
         if(!p) return alert('Kripya naya password daalein!');
         postSetting({{ owner_user: u, owner_pass: p }});
+    }}
+
+    function saveUserCustomization() {{
+        postSetting({{
+            user_page_title: document.getElementById('user_page_title').value.trim(),
+            user_bg_color: document.getElementById('user_bg_color').value,
+            user_card_color: document.getElementById('user_card_color').value,
+            user_btn_color: document.getElementById('user_btn_color').value,
+            user_badge_text: document.getElementById('user_badge_text').value.trim(),
+            user_success_msg: document.getElementById('user_success_msg').value.trim()
+        }});
+    }}
+
+    function saveAdminCustomization() {{
+        postSetting({{
+            admin_title: document.getElementById('admin_title').value.trim(),
+            admin_bg_color: document.getElementById('admin_bg_color').value,
+            admin_table_head: document.getElementById('admin_table_head').value,
+            admin_btn_color: document.getElementById('admin_btn_color').value
+        }});
     }}
     </script>
 </body>
