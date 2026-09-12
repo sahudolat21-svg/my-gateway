@@ -81,7 +81,7 @@ HTML_PAGE = """<!DOCTYPE html>
       
       <div class="qr-container">
         <img id="qr-img" class="qr-img" src="" alt="UPI QR">
-<div style="margin-top:10px;"><a id="dl-qr" href="#" download="upi_qr.png" style="display:inline-block;padding:8px 16px;background:#28a745;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:bold;">📥 Download QR Code</a></div>
+<div style="margin-top:10px;"><a id="download-btn" download="upi_qr.png" href="#" style="display: inline-block; margin-top: 10px; padding: 8px 16px; background: #16a34a; color: white; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: bold;">📥 Download QR Code</a></div>
       </div>
       <p style="font-size: 12px; color: #94a3b8; margin: 0 0 10px;"><div style="margin: 10px auto 14px auto; max-width: 90%; padding: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px; font-size: 12px; color: #cbd5e1; text-align: left;">
             <span style="color: #38bdf8; font-weight: bold;">💳 Supported Modes:</span><br>
@@ -158,6 +158,16 @@ HTML_PAGE = """<!DOCTYPE html>
 
         
 
+
+<script>
+window.addEventListener('load', function() {
+    var qrImg = document.getElementById('qr-img');
+    var btn = document.getElementById('download-btn');
+    if(qrImg && btn) {
+        btn.href = qrImg.src;
+    }
+});
+</script>
 </body>
 </html>
 """
