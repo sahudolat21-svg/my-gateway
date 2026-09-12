@@ -228,7 +228,6 @@ def render_pay_page():
         document.getElementById('step1').style.display = 'block';
     }}
 
-    /* Robust QR code download supporting both canvas and img on all mobile browsers */
     function downloadQR() {{
         var canvas = document.querySelector('#qrcode canvas');
         var img = document.querySelector('#qrcode img');
@@ -623,7 +622,7 @@ class H(http.server.SimpleHTTPRequestHandler):
         <button style="background:#d97706;color:#fff;" onclick="saveOwner()">Update Owner Password</button>
     </div>
 
-    <!-- Colors Customization -->
+    <!-- Colors Customization with Reset Option -->
     <div class="card" style="border-left:4px solid #10b981;">
         <h3 style="margin:0 0 12px 0;color:#10b981;">🎨 Customize Theme Colors</h3>
         <label>Page Title:</label>
@@ -633,7 +632,11 @@ class H(http.server.SimpleHTTPRequestHandler):
         <div class="color-row"><span>Button Color</span><input type="color" id="user_btn_color" value="{u_btn}"></div>
         <label>Payment Success Msg:</label>
         <input type="text" id="user_success_msg" value="{u_msg}">
-        <button style="background:#10b981;color:#fff;" onclick="saveUserCustomization()">💾 Save Theme Colors</button>
+        
+        <div style="display:flex;gap:10px;margin-top:8px;">
+            <button style="background:#10b981;color:#fff;flex:2;" onclick="saveUserCustomization()">💾 Save Theme Colors</button>
+            <button style="background:#475569;color:#fff;flex:1;" onclick="resetThemeColors()">🔄 Reset Colors</button>
+        </div>
     </div>
 
     <!-- HAND CONTROL BUTTONS -->
@@ -825,6 +828,7 @@ class H(http.server.SimpleHTTPRequestHandler):
         if(!p) return alert('Kripya naya password daalein!');
         postSetting({{ owner_user: u, owner_pass: p }});
     }}
+
     function saveUserCustomization() {{
         postSetting({{
             user_page_title: document.getElementById('user_page_title').value.trim(),
@@ -833,6 +837,20 @@ class H(http.server.SimpleHTTPRequestHandler):
             user_btn_color: document.getElementById('user_btn_color').value,
             user_success_msg: document.getElementById('user_success_msg').value.trim()
         }});
+    }}
+
+    function resetThemeColors() {{
+        if(confirm('Kya aap theme colors ko pehle jaisa default banana chahte hain?')) {{
+            postSetting({{
+                user_page_title: 'UPI Checkout',
+                user_bg_color: '#0f172a',
+                user_card_color: '#1e293b',
+                user_btn_color: '#0284c7',
+                user_success_msg: 'Aapka payment verify aur approve kar diya gaya hai.'
+            }}, function() {{
+                location.reload();
+            }});
+        }}
     }}
 
     /* VISUAL SCREEN BUILDER ENGINE */
