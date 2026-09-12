@@ -419,33 +419,50 @@ class H(http.server.SimpleHTTPRequestHandler):
 
         elif self.path == "/api/admin/send-otp":
             RESET_OTP = str(random.randint(100000, 999999))
-            sent = False
             smtp_p = os.environ.get("SMTP_PASS", "").replace(" ", "").strip()
+            smtp_e = os.environ.get("SMTP_EMAIL", ADMIN_EMAIL).strip()
+            
+            sent = False
+            err_msg = ""
+            
             if smtp_p:
+                # Try Port 587 (STARTTLS - standard & fast on cloud servers)
                 try:
-                    msg = MIMEText(f"Aapka Admin Reset OTP hai: {RESET_OTP}")
+                    msg = MIMEText(f"Aapka Admin Password Reset OTP hai: {RESET_OTP}
+
+Yeh OTP agle 10 minute tak valid hai.")
                     msg["Subject"] = "Admin Password Reset OTP"
-                    msg["From"] = ADMIN_EMAIL
+                    msg["From"] = smtp_e
                     msg["To"] = ADMIN_EMAIL
-                    server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=7)
-                    server.login(ADMIN_EMAIL, smtp_p)
-                    server.sendmail(ADMIN_EMAIL, [ADMIN_EMAIL], msg.as_string())
+                    
+                    server = smtplib.SMTP("smtp.gmail.com", 587, timeout=10)
+                    server.starttls()
+                    server.login(smtp_e, smtp_p)
+                    server.sendmail(smtp_e, [ADMIN_EMAIL], msg.as_string())
                     server.quit()
                     sent = True
-                except Exception as ex:
-                    print("SMTP_ERR:", ex)
-                    sent = False
-            
-            print(f"\n[OTP] Admin Reset OTP: {RESET_OTP}\n")
-            if sent:
-                msg_txt = "OTP aapke email par bhej diya gaya hai!"
+                except Exception as ex1:
+                    try:
+                        # Fallback to SSL 465
+                        server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10)
+                        server.login(smtp_e, smtp_p)
+                        server.sendmail(smtp_e, [ADMIN_EMAIL], msg.as_string())
+                        server.quit()
+                        sent = True
+                    except Exception as ex2:
+                        err_msg = str(ex2)
             else:
-                msg_txt = f"OTP bhej diya gaya: {RESET_OTP}"
-            
+                err_msg = "Render Environment me SMTP_PASS nahi mila."
+
+            if sent:
+                res_data = {"ok": True, "msg": "OTP aapke Gmail (sahudolat21@gmail.com) par bhej diya gaya hai! Inbox check karein."}
+            else:
+                res_data = {"ok": False, "msg": f"Email bhejne me dikkat: {err_msg}. Render me SMTP_PASS sahi se dalein."}
+
             self.send_response(200)
             self.send_header("Content-type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps({"ok": True, "msg": msg_txt}).encode("utf-8"))
+            self.wfile.write(json.dumps(res_data).encode("utf-8"))
 
         elif self.path == "/api/admin/verify-reset":
             otp_val = d.get("otp")
