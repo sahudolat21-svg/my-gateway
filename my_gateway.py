@@ -12,7 +12,6 @@ DB_FILE = "payments.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    # Payments table
     c.execute("""CREATE TABLE IF NOT EXISTS tx (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         utr TEXT UNIQUE,
@@ -21,12 +20,10 @@ def init_db():
         status TEXT DEFAULT 'PENDING',
         dt TEXT
     )""")
-    # Settings table
     c.execute("""CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         val TEXT
     )""")
-    # Default settings agar pehle se nahi hai
     c.execute("INSERT OR IGNORE INTO settings (key, val) VALUES ('upi_id', '7546982355-1@mbkns')")
     c.execute("INSERT OR IGNORE INTO settings (key, val) VALUES ('receiver_name', 'Rupa Kumari')")
     c.execute("INSERT OR IGNORE INTO settings (key, val) VALUES ('admin_user', '7546982355')")
@@ -267,7 +264,7 @@ class H(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         p = urlparse(self.path).path
         
-        # 1. USER URL
+        # USER URL
         if p in ["/", "/pay"]:
             self.send_response(200)
             self.send_header("Content-type", "text/html; charset=utf-8")
@@ -288,7 +285,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({"status": r[0] if r else "NOT_FOUND"}).encode("utf-8"))
 
-        # 2. ADMIN URL (/admin)
+        # ADMIN URL
         elif p == "/admin/login":
             self.send_response(200)
             self.send_header("Content-type", "text/html; charset=utf-8")
@@ -358,7 +355,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(adm.encode("utf-8"))
 
-        # 3. OWNER URL (/owner)
+        # OWNER URL
         elif p == "/owner/login":
             self.send_response(200)
             self.send_header("Content-type", "text/html; charset=utf-8")
@@ -372,17 +369,35 @@ class H(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 return
 
+            today_str = datetime.now().strftime("%Y-%m-%d")
+
+            conn = sqlite3.connect(DB_FILE)
+            # Today's 24H Stats (Reset every day)
+            day_rev = conn.cursor().execute("SELECT SUM(CAST(amt AS REAL)) FROM tx WHERE status='APPROVED' AND dt LIKE ?", (f"{today_str}%",)).fetchone()[0] or 0
+            day_app = conn.cursor().execute("SELECT COUNT(*) FROM tx WHERE status='APPROVED' AND dt LIKE ?", (f"{today_str}%",)).fetchone()[0] or 0
+            day_rej = conn.cursor().execute("SELECT COUNT(*) FROM tx WHERE status='REJECTED' AND dt LIKE ?", (f"{today_str}%",)).fetchone()[0] or 0
+            day_pend = conn.cursor().execute("SELECT COUNT(*) FROM tx WHERE status='PENDING' AND dt LIKE ?", (f"{today_str}%",)).fetchone()[0] or 0
+
+            # All-time stats for the records modal
+            all_rev = conn.cursor().execute("SELECT SUM(CAST(amt AS REAL)) FROM tx WHERE status='APPROVED'").fetchone()[0] or 0
+            all_app = conn.cursor().execute("SELECT COUNT(*) FROM tx WHERE status='APPROVED'").fetchone()[0] or 0
+            all_rej = conn.cursor().execute("SELECT COUNT(*) FROM tx WHERE status='REJECTED'").fetchone()[0] or 0
+            all_pend = conn.cursor().execute("SELECT COUNT(*) FROM tx WHERE status='PENDING'").fetchone()[0] or 0
+
+            # All transactions for all-day record view
+            all_rows = conn.cursor().execute("SELECT id, utr, amt, status, dt FROM tx ORDER BY id DESC").fetchall()
+            conn.close()
+
             upi_id = get_setting("upi_id")
             name = get_setting("receiver_name")
             admin_user = get_setting("admin_user")
             admin_pass = get_setting("admin_pass")
             owner_user = get_setting("owner_user")
 
-            conn = sqlite3.connect(DB_FILE)
-            tot_rev = conn.cursor().execute("SELECT SUM(CAST(amt AS REAL)) FROM tx WHERE status='APPROVED'").fetchone()[0] or 0
-            tot_cnt = conn.cursor().execute("SELECT COUNT(*) FROM tx WHERE status='APPROVED'").fetchone()[0] or 0
-            tot_pend = conn.cursor().execute("SELECT COUNT(*) FROM tx WHERE status='PENDING'").fetchone()[0] or 0
-            conn.close()
+            all_trs_html = ""
+            for r in all_rows:
+                col = "#10b981" if r[3] == "APPROVED" else ("#ef4444" if r[3] == "REJECTED" else "#f59e0b")
+                all_trs_html += f'<tr style="border-bottom:1px solid #334155;"><td style="padding:8px;">#{r[0]}</td><td style="font-family:monospace;">{r[1]}</td><td>₹{r[2]}</td><td style="color:{col};font-weight:bold;">{r[3]}</td><td style="font-size:11px;color:#94a3b8;">{r[4]}</td></tr>'
 
             owner_html = f"""<!DOCTYPE html>
 <html>
@@ -393,25 +408,40 @@ class H(http.server.SimpleHTTPRequestHandler):
         * {{ touch-action: manipulation; -webkit-text-size-adjust: 100%; box-sizing: border-box; }}
         body {{ background:#090d16; color:#f8fafc; font-family:sans-serif; padding:15px; margin:0; }}
         .card {{ background:#1e293b; padding:18px; border-radius:12px; margin-bottom:15px; border:1px solid #334155; }}
-        .grid {{ display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:10px; margin-bottom:15px; }}
+        .grid {{ display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; margin-bottom:15px; }}
         .stat {{ background:#0f172a; padding:14px; border-radius:10px; border:1px solid #1e293b; text-align:center; }}
-        .stat-val {{ font-size:22px; font-weight:bold; color:#38bdf8; margin-top:4px; }}
+        .stat-val {{ font-size:22px; font-weight:bold; margin-top:4px; }}
         input {{ width:100%; padding:12px; margin:6px 0 12px 0; background:#0f172a; border:1px solid #475569; border-radius:6px; color:#fff; font-size:16px !important; }}
         label {{ font-size:12px; color:#94a3b8; font-weight:bold; }}
         button {{ width:100%; padding:12px; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:15px; }}
+        
+        /* All Records Modal */
+        #allRecordsModal {{ display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.92); justify-content:center; align-items:center; padding:15px; }}
+        .modal-content {{ background:#1e293b; width:100%; max-width:650px; max-height:88vh; border-radius:12px; border:1px solid #38bdf8; display:flex; flex-direction:column; padding:18px; }}
     </style>
 </head>
 <body>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
-        <h2 style="margin:0;color:#facc15;">👑 Master Owner Panel</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div>
+            <h2 style="margin:0;color:#facc15;">👑 Master Owner Panel</h2>
+            <div style="font-size:11px;color:#38bdf8;margin-top:2px;">📅 Today's Live Stats (Auto Reset 24H)</div>
+        </div>
         <button onclick="document.cookie='owner_auth=; Max-Age=0; path=/;';location.href='/owner/login';" style="background:#ef4444;color:#fff;width:auto;padding:8px 14px;">Logout</button>
     </div>
 
-    <!-- Revenue Analytics -->
+    <!-- 24H Today Analytics (4 Cards including Rejected) -->
     <div class="grid">
-        <div class="stat"><div style="font-size:11px;color:#94a3b8;">Total Revenue</div><div class="stat-val" style="color:#10b981;">₹{tot_rev:,.0f}</div></div>
-        <div class="stat"><div style="font-size:11px;color:#94a3b8;">Approved Orders</div><div class="stat-val">{tot_cnt}</div></div>
-        <div class="stat"><div style="font-size:11px;color:#94a3b8;">Pending Approvals</div><div class="stat-val" style="color:#f59e0b;">{tot_pend}</div></div>
+        <div class="stat"><div style="font-size:11px;color:#94a3b8;">Today's Revenue</div><div class="stat-val" style="color:#10b981;">₹{day_rev:,.0f}</div></div>
+        <div class="stat"><div style="font-size:11px;color:#94a3b8;">Approved Orders</div><div class="stat-val" style="color:#38bdf8;">{day_app}</div></div>
+        <div class="stat"><div style="font-size:11px;color:#94a3b8;">Pending Approvals</div><div class="stat-val" style="color:#f59e0b;">{day_pend}</div></div>
+        <div class="stat"><div style="font-size:11px;color:#94a3b8;">Rejected Orders</div><div class="stat-val" style="color:#ef4444;">{day_rej}</div></div>
+    </div>
+
+    <!-- All Day Records Button -->
+    <div style="margin-bottom:15px;">
+        <button onclick="openAllRecords()" style="background:#6366f1;color:#fff;display:flex;justify-content:center;align-items:center;gap:8px;font-size:16px;box-shadow:0 4px 12px rgba(99,102,241,0.3);">
+            📊 View All-Time Record (Lifetime History)
+        </button>
     </div>
 
     <!-- Payment Settings Form -->
@@ -449,7 +479,43 @@ class H(http.server.SimpleHTTPRequestHandler):
         <a href="/" target="_blank" style="color:#10b981;font-size:14px;text-decoration:none;">➔ View User Checkout Page</a>
     </div>
 
+    <!-- Fullscreen All-Time Records Modal -->
+    <div id="allRecordsModal">
+        <div class="modal-content">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <h3 style="margin:0;color:#38bdf8;">📊 Lifetime All-Day Records</h3>
+                <span onclick="closeAllRecords()" style="font-size:24px;color:#fff;cursor:pointer;font-weight:bold;padding:0 8px;">&times;</span>
+            </div>
+            
+            <div class="grid" style="margin-bottom:12px;">
+                <div class="stat"><div style="font-size:10px;color:#94a3b8;">Total Revenue</div><div class="stat-val" style="color:#10b981;font-size:18px;">₹{all_rev:,.0f}</div></div>
+                <div class="stat"><div style="font-size:10px;color:#94a3b8;">Total Approved</div><div class="stat-val" style="color:#38bdf8;font-size:18px;">{all_app}</div></div>
+                <div class="stat"><div style="font-size:10px;color:#94a3b8;">Total Pending</div><div class="stat-val" style="color:#f59e0b;font-size:18px;">{all_pend}</div></div>
+                <div class="stat"><div style="font-size:10px;color:#94a3b8;">Total Rejected</div><div class="stat-val" style="color:#ef4444;font-size:18px;">{all_rej}</div></div>
+            </div>
+
+            <div style="overflow-y:auto;flex:1;background:#0f172a;border-radius:8px;border:1px solid #334155;">
+                <table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;">
+                    <thead style="background:#1e293b;position:sticky;top:0;">
+                        <tr><th style="padding:8px;">ID</th><th>UTR</th><th>Amt</th><th>Status</th><th>Date</th></tr>
+                    </thead>
+                    <tbody>
+                        {all_trs_html if all_trs_html else '<tr><td colspan="5" style="text-align:center;padding:15px;color:#94a3b8;">Koi record nahi mila.</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+
+            <button onclick="closeAllRecords()" style="margin-top:12px;background:#475569;color:#fff;padding:10px;">Close Records</button>
+        </div>
+    </div>
+
     <script>
+    function openAllRecords() {{
+        document.getElementById('allRecordsModal').style.display = 'flex';
+    }}
+    function closeAllRecords() {{
+        document.getElementById('allRecordsModal').style.display = 'none';
+    }}
     function postSetting(data) {{
         fetch('/api/owner/save-settings', {{
             method: 'POST',
