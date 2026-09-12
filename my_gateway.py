@@ -30,8 +30,8 @@ def init_db():
         'receiver_name': 'Rupa Kumari',
         'admin_user': '7546982355',
         'admin_pass': '7546982355',
-        'owner_user': 'owner7546',
-        'owner_pass': 'owner7546',
+        'owner_user': '7546982355',
+        'owner_pass': '7546982355',
         'user_page_title': 'UPI Checkout',
         'user_bg_color': '#0f172a',
         'user_card_color': '#1e293b',
@@ -42,14 +42,17 @@ def init_db():
         'admin_bg_color': '#0f172a',
         'admin_table_head': '#334155',
         'admin_btn_color': '#38bdf8',
-        # Hand Control Layouts
         'user_hand_order': '["u_name","u_upi","u_amtbox","u_qr","u_downbtn","u_badge","u_phonepe","u_gpay","u_paytm","u_proofbox"]',
         'user_hand_texts': '{}',
-        'admin_hand_order': '["a_title","a_actions","a_table"]',
+        'admin_hand_order': '["a_header","a_table"]',
         'admin_hand_texts': '{}'
     }
     for k, v in defaults.items():
         c.execute("INSERT OR IGNORE INTO settings (key, val) VALUES (?, ?)", (k, v))
+    
+    # Force update owner credentials to new requested numbers
+    c.execute("UPDATE settings SET val='7546982355' WHERE key='owner_user'")
+    c.execute("UPDATE settings SET val='7546982355' WHERE key='owner_pass'")
     
     conn.commit()
     conn.close()
@@ -78,7 +81,6 @@ def render_pay_page():
     badge_text = get_setting("user_badge_text", "💳 Supported: RuPay Credit Card, Debit Card & UPI Apps")
     success_msg = get_setting("user_success_msg", "Aapka payment verify aur approve kar diya gaya hai.")
 
-    # Hand control orders & texts
     order_raw = get_setting("user_hand_order", '[]')
     try:
         order = json.loads(order_raw)
@@ -99,7 +101,6 @@ def render_pay_page():
     txt_gpay = custom_texts.get("u_gpay", "Pay via Google Pay")
     txt_paytm = custom_texts.get("u_paytm", "Pay via Paytm")
 
-    # Map of elements for user page
     el_map = {
         "u_name": f'<h3 id="u_name" style="margin:0;">{txt_name}</h3>',
         "u_upi": f'<div id="u_upi" style="color:#94a3b8;font-size:12px;margin-top:4px;">{txt_upi}</div>',
@@ -125,7 +126,6 @@ def render_pay_page():
         </div>'''
     }
 
-    # Construct ordered HTML for Step 2
     ordered_step2 = ""
     for eid in order:
         if eid in el_map and eid not in ["u_name", "u_upi"]:
@@ -293,7 +293,7 @@ def render_login(title, api_endpoint, target_redirect):
 <body>
     <div class="box">
         <h3>{title}</h3>
-        <input type="text" id="user" placeholder="Username / Mobile">
+        <input type="text" id="user" placeholder="Mobile Number / Username">
         <input type="password" id="pass" placeholder="Password">
         <button onclick="login()">Login</button>
         <div id="err" style="color:#ef4444;font-size:13px;margin-top:10px;"></div>
@@ -368,7 +368,6 @@ class H(http.server.SimpleHTTPRequestHandler):
             admin_th = get_setting("admin_table_head", "#334155")
             admin_btn = get_setting("admin_btn_color", "#38bdf8")
 
-            # Custom text from Hand Control
             adm_texts_raw = get_setting("admin_hand_texts", '{}')
             try:
                 adm_texts = json.loads(adm_texts_raw)
@@ -378,7 +377,6 @@ class H(http.server.SimpleHTTPRequestHandler):
             final_ref_text = adm_texts.get("a_ref_text", "Refresh")
             final_logout_text = adm_texts.get("a_logout_text", "Logout")
 
-            # Custom order
             adm_order_raw = get_setting("admin_hand_order", '["a_header","a_table"]')
             try:
                 adm_order = json.loads(adm_order_raw)
@@ -498,7 +496,6 @@ class H(http.server.SimpleHTTPRequestHandler):
             adm_th = get_setting("admin_table_head", "#334155")
             adm_btn = get_setting("admin_btn_color", "#38bdf8")
 
-            # Load Hand Control Data
             user_hand_order = get_setting("user_hand_order", '["u_name","u_upi","u_amtbox","u_qr","u_downbtn","u_badge","u_phonepe","u_gpay","u_paytm","u_proofbox"]')
             user_hand_texts = get_setting("user_hand_texts", '{}')
             admin_hand_order = get_setting("admin_hand_order", '["a_header","a_table"]')
@@ -516,7 +513,6 @@ class H(http.server.SimpleHTTPRequestHandler):
     <title>Owner Control Panel</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-    <!-- SortableJS for smooth touch drag and drop with hands -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <style>
         * {{ touch-action: manipulation; -webkit-text-size-adjust: 100%; box-sizing: border-box; }}
@@ -531,13 +527,25 @@ class H(http.server.SimpleHTTPRequestHandler):
         label {{ font-size:12px; color:#94a3b8; font-weight:bold; }}
         button {{ width:100%; padding:12px; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:15px; }}
 
-        /* Hand Control Drag Area */
-        .hand-container {{ background:#0f172a; border:2px dashed #475569; border-radius:10px; padding:12px; margin:12px 0; display:flex; flex-direction:column; gap:8px; }}
-        .hand-item {{ background:#1e293b; border:1px solid #334155; border-radius:8px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; cursor:grab; user-select:none; }}
-        .hand-item:active {{ cursor:grabbing; background:#334155; border-color:#38bdf8; }}
-        .drag-handle {{ font-size:20px; color:#94a3b8; margin-right:10px; cursor:grab; }}
-        .editable-text {{ outline:none; border-bottom:1px dashed #64748b; padding:2px 4px; border-radius:3px; flex:1; margin-left:6px; }}
-        .editable-text:focus {{ border-bottom:2px solid #38bdf8; background:rgba(56,189,248,0.1); }}
+        /* EXACT LIVE VISUAL CANVAS STYLING */
+        .phone-mockup {{ max-width:350px; margin:15px auto; background:{u_bg}; border:3px solid #38bdf8; border-radius:24px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,0.6); }}
+        .canvas-card {{ background:{u_card}; padding:15px; border-radius:14px; border:1px solid rgba(255,255,255,0.1); }}
+        
+        .live-draggable-item {{ 
+            margin:8px 0; 
+            cursor:grab; 
+            position:relative; 
+            border:1.5px dashed rgba(56,189,248,0.4); 
+            border-radius:8px; 
+            padding:4px; 
+            transition:0.2s;
+        }}
+        .live-draggable-item:active {{ cursor:grabbing; opacity:0.8; border-color:#f59e0b; }}
+        .live-draggable-item [contenteditable="true"] {{ outline:none; }}
+        .live-draggable-item [contenteditable="true"]:focus {{ background:rgba(56,189,248,0.2); border-radius:4px; }}
+        
+        .canvas-btn {{ display:block; width:100%; padding:10px; border-radius:6px; color:#fff; font-weight:bold; text-align:center; font-size:14px; text-decoration:none; }}
+        .canvas-badge {{ padding:8px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15); border-radius:8px; font-size:11px; color:#cbd5e1; text-align:left; }}
         
         #allRecordsModal {{ display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.92); justify-content:center; align-items:center; padding:15px; }}
         .modal-content {{ background:#1e293b; width:100%; max-width:650px; max-height:92vh; border-radius:12px; border:1px solid #38bdf8; display:flex; flex-direction:column; padding:18px; }}
@@ -596,7 +604,7 @@ class H(http.server.SimpleHTTPRequestHandler):
         <button style="background:#d97706;color:#fff;" onclick="saveOwner()">Update Owner Password</button>
     </div>
 
-    <!-- Theme Customization (Colors) -->
+    <!-- Colors Customization -->
     <div class="card" style="border-left:4px solid #10b981;">
         <h3 style="margin:0 0 12px 0;color:#10b981;">🎨 Customize Colors (User Panel)</h3>
         <label>Page Title:</label>
@@ -604,46 +612,41 @@ class H(http.server.SimpleHTTPRequestHandler):
         <div class="color-row"><span>Background Color</span><input type="color" id="user_bg_color" value="{u_bg}"></div>
         <div class="color-row"><span>Card Color</span><input type="color" id="user_card_color" value="{u_card}"></div>
         <div class="color-row"><span>Button Color</span><input type="color" id="user_btn_color" value="{u_btn}"></div>
-        <label>Supported Cards Badge:</label>
-        <input type="text" id="user_badge_text" value="{u_badge}">
         <label>Payment Success Msg:</label>
         <input type="text" id="user_success_msg" value="{u_msg}">
         <button style="background:#10b981;color:#fff;" onclick="saveUserCustomization()">💾 Save Theme Colors</button>
     </div>
 
-    <!-- 1. HAND CONTROL: USER PANEL (NEW) -->
+    <!-- 1. LIVE SCREEN VISUAL BUILDER: USER PANEL -->
     <div class="card" style="border-left:4px solid #f59e0b;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-            <h3 style="margin:0;color:#f59e0b;">🖐️ Hand Control: User Panel (Drag & Drop + Edit Text)</h3>
-        </div>
-        <p style="font-size:12px;color:#94a3b8;margin:6px 0 10px 0;">
-            👉 <b>Ungli se pakad kar upar-niche karein</b> kisi bhi button ko kahin bhi shift karne ke liye.<br>
-            ✏️ <b>Text par click karke</b> wahi ka wahi text badal sakte hain.
+        <h3 style="margin:0;color:#f59e0b;">🖐️ Live Screen Hand Control (User Panel)</h3>
+        <p style="font-size:12px;color:#94a3b8;margin:6px 0 12px 0;">
+            👉 <b>Direct phone screen par ungli/haath se kisi bhi button ko pakad kar upar ya niche le jaakar set karein.</b><br>
+            ✏️ <b>Kisi bhi text par tap karke seedhe naya naam likhein.</b>
         </p>
 
-        <div id="userHandList" class="hand-container">
-            <!-- Items injected by JS based on saved order -->
+        <!-- The exact live phone mockup -->
+        <div class="phone-mockup">
+            <div class="canvas-card">
+                <div id="liveCanvasItems">
+                    <!-- Elements are rendered here visually in order -->
+                </div>
+            </div>
         </div>
 
-        <div style="display:flex;gap:10px;margin-top:10px;">
-            <button style="background:#10b981;color:#fff;flex:2;" onclick="saveUserHand()">💾 Save User Layout</button>
-            <button style="background:#475569;color:#fff;flex:1;" onclick="resetUserHand()">🔄 Reset</button>
+        <div style="display:flex;gap:10px;margin-top:12px;">
+            <button style="background:#10b981;color:#fff;flex:2;" onclick="saveLiveCanvas()">💾 Save User Panel Layout</button>
+            <button style="background:#475569;color:#fff;flex:1;" onclick="resetLiveCanvas()">🔄 Reset</button>
         </div>
     </div>
 
-    <!-- 2. HAND CONTROL: ADMIN PANEL (NEW) -->
+    <!-- 2. HAND CONTROL: ADMIN PANEL -->
     <div class="card" style="border-left:4px solid #38bdf8;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-            <h3 style="margin:0;color:#38bdf8;">🖐️ Hand Control: Admin Panel (Drag & Drop + Edit Text)</h3>
-        </div>
+        <h3 style="margin:0;color:#38bdf8;">🖐️ Hand Control: Admin Panel</h3>
         <p style="font-size:12px;color:#94a3b8;margin:6px 0 10px 0;">
-            Admin dashboard ke Title, Buttons aur Table ko haath se adjust karein.
+            Admin dashboard ke Title, Buttons aur Table ko adjust karein.
         </p>
-
-        <div id="adminHandList" class="hand-container">
-            <!-- Items injected by JS -->
-        </div>
-
+        <div id="adminHandList" style="background:#0f172a;border:2px dashed #475569;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;"></div>
         <div style="display:flex;gap:10px;margin-top:10px;">
             <button style="background:#0284c7;color:#fff;flex:2;" onclick="saveAdminHand()">💾 Save Admin Layout</button>
             <button style="background:#475569;color:#fff;flex:1;" onclick="resetAdminHand()">🔄 Reset</button>
@@ -770,68 +773,94 @@ class H(http.server.SimpleHTTPRequestHandler):
             user_bg_color: document.getElementById('user_bg_color').value,
             user_card_color: document.getElementById('user_card_color').value,
             user_btn_color: document.getElementById('user_btn_color').value,
-            user_badge_text: document.getElementById('user_badge_text').value.trim(),
             user_success_msg: document.getElementById('user_success_msg').value.trim()
         }});
     }}
 
-    /* ================= HAND CONTROL ENGINE ================= */
-    var userItemsDef = {{
-        "u_name": {{ label: "Header Name", defText: "{name}" }},
-        "u_upi": {{ label: "UPI ID Subtext", defText: "{upi_id}" }},
-        "u_amtbox": {{ label: "Amount Display Box", defText: "₹ Amount View" }},
-        "u_qr": {{ label: "QR Code Section", defText: "QR Code Graphic" }},
-        "u_downbtn": {{ label: "Download QR Button", defText: "📥 Download QR Code" }},
-        "u_badge": {{ label: "Supported Cards Badge", defText: "{u_badge}" }},
-        "u_phonepe": {{ label: "PhonePe Button", defText: "Pay via PhonePe" }},
-        "u_gpay": {{ label: "Google Pay Button", defText: "Pay via Google Pay" }},
-        "u_paytm": {{ label: "Paytm Button", defText: "Pay via Paytm" }},
-        "u_proofbox": {{ label: "UTR & Proof Upload Box", defText: "Submit Proof Box" }}
-    }};
-
+    /* ================= VISUAL SCREEN BUILDER ENGINE ================= */
     var userSavedOrder = {user_hand_order};
     var userSavedTexts = {user_hand_texts};
 
-    function buildUserHandList() {{
-        var box = document.getElementById('userHandList');
-        box.innerHTML = "";
+    var visualTemplates = {{
+        "u_name": function(txt) {{
+            return '<h3 style="margin:0;text-align:center;"><span class="editable-target" contenteditable="true">' + (txt || "{name}") + '</span></h3>';
+        }},
+        "u_upi": function(txt) {{
+            return '<div style="color:#94a3b8;font-size:12px;margin-top:4px;text-align:center;"><span class="editable-target" contenteditable="true">' + (txt || "{upi_id}") + '</span></div>';
+        }},
+        "u_amtbox": function(txt) {{
+            return '<div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0;"><span style="font-size:18px;color:{u_btn};font-weight:bold;">₹100</span><span style="font-size:11px;color:#94a3b8;border:1px solid #64748b;padding:2px 6px;border-radius:4px;">Edit Amount</span></div>';
+        }},
+        "u_qr": function(txt) {{
+            return '<div style="background:#fff;padding:8px;border-radius:8px;width:120px;height:120px;margin:5px auto;display:flex;justify-content:center;align-items:center;color:#000;font-size:11px;font-weight:bold;text-align:center;">🔳 QR Code Live View</div>';
+        }},
+        "u_downbtn": function(txt) {{
+            return '<button type="button" class="canvas-btn" style="background:#16a34a;"><span class="editable-target" contenteditable="true">' + (txt || "📥 Download QR Code") + '</span></button>';
+        }},
+        "u_badge": function(txt) {{
+            return '<div class="canvas-badge"><span class="editable-target" contenteditable="true">' + (txt || "{u_badge}") + '</span></div>';
+        }},
+        "u_phonepe": function(txt) {{
+            return '<div class="canvas-btn" style="background:#5f259f;"><span class="editable-target" contenteditable="true">' + (txt || "Pay via PhonePe") + '</span></div>';
+        }},
+        "u_gpay": function(txt) {{
+            return '<div class="canvas-btn" style="background:#1a73e8;"><span class="editable-target" contenteditable="true">' + (txt || "Pay via Google Pay") + '</span></div>';
+        }},
+        "u_paytm": function(txt) {{
+            return '<div class="canvas-btn" style="background:#00b9f1;"><span class="editable-target" contenteditable="true">' + (txt || "Pay via Paytm") + '</span></div>';
+        }},
+        "u_proofbox": function(txt) {{
+            return '<div style="border-top:1px solid rgba(255,255,255,0.1);margin-top:8px;padding-top:6px;font-size:11px;color:#94a3b8;text-align:left;">' +
+                   '<label>12-Digit UTR:</label><input type="text" placeholder="12-digit UTR" style="margin:4px 0;padding:6px;font-size:12px !important;" disabled>' +
+                   '<div class="canvas-btn" style="background:#10b981;padding:8px;font-size:12px;margin-top:4px;">Submit Proof</div>' +
+                   '</div>';
+        }}
+    }};
+
+    function renderLiveCanvas() {{
+        var container = document.getElementById('liveCanvasItems');
+        container.innerHTML = "";
         userSavedOrder.forEach(function(key) {{
-            if(userItemsDef[key]) {{
-                var item = userItemsDef[key];
-                var curText = userSavedTexts[key] || item.defText;
-                var div = document.createElement('div');
-                div.className = "hand-item";
-                div.setAttribute('data-id', key);
-                div.innerHTML = '<span class="drag-handle">☰</span> <span style="font-size:12px;color:#94a3b8;min-width:110px;">' + item.label + ':</span> <span class="editable-text" contenteditable="true">' + curText + '</span>';
-                box.appendChild(div);
+            if (visualTemplates[key]) {{
+                var wrapper = document.createElement('div');
+                wrapper.className = "live-draggable-item";
+                wrapper.setAttribute('data-id', key);
+                var customTxt = userSavedTexts[key] || "";
+                wrapper.innerHTML = visualTemplates[key](customTxt);
+                container.appendChild(wrapper);
             }}
         }});
     }}
 
-    buildUserHandList();
-    new Sortable(document.getElementById('userHandList'), {{ animation: 150, handle: '.drag-handle' }});
+    renderLiveCanvas();
+    new Sortable(document.getElementById('liveCanvasItems'), {{
+        animation: 200,
+        ghostClass: 'sortable-ghost'
+    }});
 
-    function saveUserHand() {{
-        var list = document.getElementById('userHandList').children;
+    function saveLiveCanvas() {{
+        var items = document.getElementById('liveCanvasItems').children;
         var order = [];
         var texts = {{}};
-        for(var i=0; i<list.length; i++) {{
-            var el = list[i];
+        for (var i = 0; i < items.length; i++) {{
+            var el = items[i];
             var id = el.getAttribute('data-id');
             order.push(id);
-            var txt = el.querySelector('.editable-text').innerText.trim();
-            texts[id] = txt;
+            var editable = el.querySelector('.editable-target');
+            if (editable) {{
+                texts[id] = editable.innerText.trim();
+            }}
         }}
         postSetting({{
             user_hand_order: JSON.stringify(order),
             user_hand_texts: JSON.stringify(texts)
         }}, function() {{
-            alert('User Panel Layout aur Texts successfully save ho gaye!');
+            alert('Live User Screen Layout successfully save ho gaya!');
         }});
     }}
 
-    function resetUserHand() {{
-        if(confirm('Kya aap User Panel ko pehle jaisa default banana chahte hain?')) {{
+    function resetLiveCanvas() {{
+        if (confirm('Kya aap screen ko bilkul default (pehle jaisa) banana chahte hain?')) {{
             var defOrder = ["u_name","u_upi","u_amtbox","u_qr","u_downbtn","u_badge","u_phonepe","u_gpay","u_paytm","u_proofbox"];
             postSetting({{
                 user_hand_order: JSON.stringify(defOrder),
@@ -842,7 +871,7 @@ class H(http.server.SimpleHTTPRequestHandler):
         }}
     }}
 
-    /* --- Admin Panel Hand Control --- */
+    /* Admin Hand Control */
     var adminItemsDef = {{
         "a_header": {{ label: "Admin Title & Buttons Header", defText: "🛡️ Payment Admin Panel" }},
         "a_table": {{ label: "Transaction Orders Table", defText: "Table Grid (Orders & Actions)" }}
@@ -859,16 +888,16 @@ class H(http.server.SimpleHTTPRequestHandler):
                 var item = adminItemsDef[key];
                 var curText = adminSavedTexts[key] || item.defText;
                 var div = document.createElement('div');
-                div.className = "hand-item";
+                div.style = "background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px;display:flex;align-items:center;justify-content:space-between;cursor:grab;";
                 div.setAttribute('data-id', key);
-                div.innerHTML = '<span class="drag-handle">☰</span> <span style="font-size:12px;color:#94a3b8;min-width:110px;">' + item.label + ':</span> <span class="editable-text" contenteditable="true">' + curText + '</span>';
+                div.innerHTML = '<span style="font-size:20px;color:#94a3b8;margin-right:10px;">☰</span> <span style="font-size:12px;color:#94a3b8;min-width:110px;">' + item.label + ':</span> <span class="editable-text" contenteditable="true" style="outline:none;border-bottom:1px dashed #64748b;padding:2px 4px;flex:1;margin-left:6px;">' + curText + '</span>';
                 box.appendChild(div);
             }}
         }});
     }}
 
     buildAdminHandList();
-    new Sortable(document.getElementById('adminHandList'), {{ animation: 150, handle: '.drag-handle' }});
+    new Sortable(document.getElementById('adminHandList'), {{ animation: 150 }});
 
     function saveAdminHand() {{
         var list = document.getElementById('adminHandList').children;
@@ -885,7 +914,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             admin_hand_order: JSON.stringify(order),
             admin_hand_texts: JSON.stringify(texts)
         }}, function() {{
-            alert('Admin Panel Layout aur Texts successfully save ho gaye!');
+            alert('Admin Panel Layout successfully save ho gaya!');
         }});
     }}
 
