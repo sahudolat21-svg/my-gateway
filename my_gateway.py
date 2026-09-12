@@ -8,14 +8,19 @@ from urllib.parse import urlparse
 
 PORT = int(os.environ.get("PORT", 8080))
 
-# Agar Render Persistent Disk use karein toh wahan persist hoga, warna current directory me safe rahega
+# Persistent database storage path
 if os.path.exists("/var/data"):
     DB_FILE = "/var/data/payments.db"
 else:
     DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "payments.db")
 
+def get_db():
+    conn = sqlite3.connect(DB_FILE, timeout=15)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    return conn
+
 def init_db():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     c = conn.cursor()
     c.execute("""CREATE TABLE IF NOT EXISTS tx (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,13 +66,13 @@ def init_db():
 init_db()
 
 def get_setting(key, default=""):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     r = conn.cursor().execute("SELECT val FROM settings WHERE key=?", (key,)).fetchone()
     conn.close()
     return r[0] if r and r[0] is not None else default
 
 def set_setting(key, val):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     conn.cursor().execute("INSERT OR REPLACE INTO settings (key, val) VALUES (?, ?)", (key, val))
     conn.commit()
     conn.close()
@@ -342,7 +347,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             for item in q.split("&"):
                 if item.startswith("utr="):
                     utr = item.split("=")[1]
-            conn = sqlite3.connect(DB_FILE)
+            conn = get_db()
             r = conn.cursor().execute("SELECT status FROM tx WHERE utr=?", (utr,)).fetchone()
             conn.close()
             self.send_response(200)
@@ -384,7 +389,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             except:
                 adm_order = ["a_header","a_table"]
 
-            conn = sqlite3.connect(DB_FILE)
+            conn = get_db()
             rows = conn.cursor().execute("SELECT id, utr, amt, proof, status, dt FROM tx ORDER BY id DESC").fetchall()
             conn.close()
             
@@ -465,7 +470,7 @@ class H(http.server.SimpleHTTPRequestHandler):
 
             today_str = datetime.now().strftime("%Y-%m-%d")
 
-            conn = sqlite3.connect(DB_FILE)
+            conn = get_db()
             day_rev = conn.cursor().execute("SELECT SUM(CAST(amt AS REAL)) FROM tx WHERE status='APPROVED' AND dt LIKE ?", (f"{today_str}%",)).fetchone()[0] or 0
             day_app = conn.cursor().execute("SELECT COUNT(*) FROM tx WHERE status='APPROVED' AND dt LIKE ?", (f"{today_str}%",)).fetchone()[0] or 0
             day_rej = conn.cursor().execute("SELECT COUNT(*) FROM tx WHERE status='REJECTED' AND dt LIKE ?", (f"{today_str}%",)).fetchone()[0] or 0
@@ -492,20 +497,17 @@ class H(http.server.SimpleHTTPRequestHandler):
             u_badge = get_setting("user_badge_text", "💳 Supported: RuPay Credit Card, Debit Card & UPI Apps")
             u_msg = get_setting("user_success_msg", "Aapka payment verify aur approve kar diya gaya hai.")
 
-            adm_title = get_setting("admin_title", "🛡️ Payment Admin Panel")
-            adm_bg = get_setting("admin_bg_color", "#0f172a")
-            adm_th = get_setting("admin_table_head", "#334155")
-            adm_btn = get_setting("admin_btn_color", "#38bdf8")
-
             user_hand_order = get_setting("user_hand_order", '["u_name","u_upi","u_amtbox","u_qr","u_downbtn","u_badge","u_phonepe","u_gpay","u_paytm","u_proofbox"]')
             user_hand_texts = get_setting("user_hand_texts", '{}')
             admin_hand_order = get_setting("admin_hand_order", '["a_header","a_table"]')
             admin_hand_texts = get_setting("admin_hand_texts", '{}')
 
+            # Table rows with Delete button in Lifetime records modal
             all_trs_html = ""
             for r in all_rows:
                 col = "#10b981" if r[3] == "APPROVED" else ("#ef4444" if r[3] == "REJECTED" else "#f59e0b")
-                all_trs_html += f'<tr style="border-bottom:1px solid #334155;"><td style="padding:8px;">#{r[0]}</td><td style="font-family:monospace;">{r[1]}</td><td>₹{r[2]}</td><td style="color:{col};font-weight:bold;">{r[3]}</td><td style="font-size:11px;color:#94a3b8;">{r[4]}</td></tr>'
+                del_btn_owner = f'<button onclick="delTxOwner({r[0]})" style="background:#ef4444;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:bold;">🗑 Delete</button>'
+                all_trs_html += f'<tr style="border-bottom:1px solid #334155;"><td style="padding:8px;">#{r[0]}</td><td style="font-family:monospace;">{r[1]}</td><td>₹{r[2]}</td><td style="color:{col};font-weight:bold;">{r[3]}</td><td style="font-size:11px;color:#94a3b8;">{r[4]}</td><td style="text-align:center;">{del_btn_owner}</td></tr>'
 
             owner_html = f"""<!DOCTYPE html>
 <html>
@@ -621,10 +623,10 @@ class H(http.server.SimpleHTTPRequestHandler):
         <button style="background:#10b981;color:#fff;" onclick="saveUserCustomization()">💾 Save Theme Colors</button>
     </div>
 
-    <!-- HAND CONTROL BUTTONS (DIRECT SHOW NAHI HOGA) -->
+    <!-- HAND CONTROL BUTTONS -->
     <div class="card" style="border-left:4px solid #f59e0b;">
         <h3 style="margin:0 0 10px 0;color:#f59e0b;">🖐️ Hand Control Customizer</h3>
-        <p style="font-size:12px;color:#94a3b8;margin:0 0 12px 0;">Niche buttons par click karke screen live kholein aur ungli se jahan chahein wahan drag karein:</p>
+        <p style="font-size:12px;color:#94a3b8;margin:0 0 12px 0;">Buttons par click karke interactive modal me customization kholein:</p>
         
         <button onclick="openUserHandModal()" style="background:#f59e0b;color:#000;margin-bottom:10px;display:flex;justify-content:center;align-items:center;gap:8px;">
             📱 Open Hand Control (User Panel)
@@ -653,9 +655,7 @@ class H(http.server.SimpleHTTPRequestHandler):
 
             <div class="phone-mockup">
                 <div class="canvas-card">
-                    <div id="liveCanvasItems">
-                        <!-- Draggable screen items -->
-                    </div>
+                    <div id="liveCanvasItems"></div>
                 </div>
             </div>
 
@@ -686,7 +686,7 @@ class H(http.server.SimpleHTTPRequestHandler):
         </div>
     </div>
 
-    <!-- All-Time Records Modal -->
+    <!-- All-Time Records Modal (With Delete Action & PDF Download) -->
     <div id="allRecordsModal">
         <div class="modal-content">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -704,10 +704,10 @@ class H(http.server.SimpleHTTPRequestHandler):
             <div style="overflow-y:auto;flex:1;background:#0f172a;border-radius:8px;border:1px solid #334155;">
                 <table id="recordsTable" style="width:100%;border-collapse:collapse;font-size:12px;text-align:left;">
                     <thead style="background:#1e293b;position:sticky;top:0;">
-                        <tr><th style="padding:8px;">ID</th><th>UTR</th><th>Amt</th><th>Status</th><th>Date</th></tr>
+                        <tr><th style="padding:8px;">ID</th><th>UTR</th><th>Amt</th><th>Status</th><th>Date</th><th style="text-align:center;">Action</th></tr>
                     </thead>
                     <tbody>
-                        {all_trs_html if all_trs_html else '<tr><td colspan="5" style="text-align:center;padding:15px;color:#94a3b8;">Koi record nahi mila.</td></tr>'}
+                        {all_trs_html if all_trs_html else '<tr><td colspan="6" style="text-align:center;padding:15px;color:#94a3b8;">Koi record nahi mila.</td></tr>'}
                     </tbody>
                 </table>
             </div>
@@ -733,6 +733,16 @@ class H(http.server.SimpleHTTPRequestHandler):
 
     function openAdminHandModal() {{ document.getElementById('adminHandModal').style.display = 'flex'; }}
     function closeAdminHandModal() {{ document.getElementById('adminHandModal').style.display = 'none'; }}
+
+    function delTxOwner(id) {{
+        if(confirm('Kya aap sach me record #' + id + ' delete karna chahte hain?')) {{
+            fetch('/api/delete', {{
+                method: 'POST',
+                headers: {{'Content-Type': 'application/json'}},
+                body: JSON.stringify({{id: id}})
+            }}).then(() => location.reload());
+        }}
+    }}
 
     function downloadPDF() {{
         var btn = event.target;
@@ -766,6 +776,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             doc.autoTable({{
                 html: '#recordsTable',
                 startY: doc.lastAutoTable.finalY + 10,
+                columns: [0, 1, 2, 3, 4], // Exclude action column from PDF
                 styles: {{ fontSize: 9, cellPadding: 3 }},
                 headStyles: {{ fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' }},
                 alternateRowStyles: {{ fillColor: [248, 250, 252] }},
@@ -1024,7 +1035,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(b'{"ok":true}')
 
         elif self.path == "/api/submit":
-            conn = sqlite3.connect(DB_FILE)
+            conn = get_db()
             c = conn.cursor()
             try:
                 c.execute("INSERT INTO tx (utr, amt, proof, status, dt) VALUES (?, ?, ?, 'PENDING', ?)",
@@ -1040,7 +1051,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(res).encode("utf-8"))
 
         elif self.path == "/api/action":
-            conn = sqlite3.connect(DB_FILE)
+            conn = get_db()
             c = conn.cursor()
             c.execute("UPDATE tx SET status=? WHERE id=?", (d.get("st"), d.get("id")))
             conn.commit()
@@ -1051,7 +1062,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(b'{"ok":true}')
 
         elif self.path == "/api/delete":
-            conn = sqlite3.connect(DB_FILE)
+            conn = get_db()
             c = conn.cursor()
             c.execute("DELETE FROM tx WHERE id=?", (d.get("id"),))
             conn.commit()
