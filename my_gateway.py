@@ -47,7 +47,7 @@ def init_db():
         'user_btn_color': '#0284c7',
         'user_badge_text': '💳 Supported: RuPay Credit Card, Debit Card & UPI Apps',
         'user_success_msg': 'Aapka payment verify aur approve kar diya gaya hai.',
-        'admin_title': '🛡️ Payment Admin Panel',
+        'admin_title': 'Admin Desk Panel',
         'admin_bg_color': '#0f172a',
         'admin_table_head': '#334155',
         'admin_btn_color': '#38bdf8',
@@ -75,6 +75,29 @@ def set_setting(key, val):
     conn.cursor().execute("INSERT OR REPLACE INTO settings (key, val) VALUES (?, ?)", (key, val))
     conn.commit()
     conn.close()
+
+# LOGOS (SVG FORMAT)
+USER_LOGO_SVG = """<svg width="65" height="65" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto 8px auto;">
+  <circle cx="60" cy="60" r="56" fill="#0f172a" stroke="#10b981" stroke-width="3.5"/>
+  <text x="60" y="55" font-family="Arial, sans-serif" font-size="20" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1">PAY<tspan fill="#10b981">FAST</tspan></text>
+  <path d="M32 68 Q60 84 84 70" fill="none" stroke="#10b981" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M80 65 L87 70 L83 77 Z" fill="#10b981"/>
+</svg>"""
+
+ADMIN_LOGO_SVG = """<svg width="46" height="46" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:8px;">
+  <circle cx="60" cy="60" r="56" fill="#0f172a" stroke="#38bdf8" stroke-width="3.5"/>
+  <text x="60" y="55" font-family="Arial, sans-serif" font-size="18" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1">ADMIN<tspan fill="#38bdf8">DESK</tspan></text>
+  <path d="M28 68 Q60 85 88 70" fill="none" stroke="#38bdf8" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M84 65 L92 70 L87 77 Z" fill="#38bdf8"/>
+</svg>"""
+
+OWNER_LOGO_SVG = """<svg width="50" height="50" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:8px;">
+  <circle cx="60" cy="60" r="56" fill="#090d16" stroke="#facc15" stroke-width="3.5"/>
+  <path d="M48 29 L53 35 L60 26 L67 35 L72 29 L70 39 H50 Z" fill="#facc15"/>
+  <text x="60" y="58" font-family="Arial, sans-serif" font-size="16" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1">OWNER<tspan fill="#facc15">DESK</tspan></text>
+  <path d="M28 70 Q60 88 88 72" fill="none" stroke="#facc15" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M84 67 L92 72 L87 79 Z" fill="#facc15"/>
+</svg>"""
 
 def render_pay_page():
     upi_id = get_setting("upi_id", "7546982355-1@mbkns")
@@ -159,6 +182,7 @@ def render_pay_page():
 </head>
 <body>
     <div class="c">
+        {USER_LOGO_SVG}
         {el_map.get("u_name", "")}
         {el_map.get("u_upi", "")}
         
@@ -296,7 +320,7 @@ def render_pay_page():
 </body>
 </html>"""
 
-def render_login(title, api_endpoint, target_redirect):
+def render_login(title, api_endpoint, target_redirect, logo_svg=""):
     return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -312,7 +336,8 @@ def render_login(title, api_endpoint, target_redirect):
 </head>
 <body>
     <div class="box">
-        <h3>{title}</h3>
+        {logo_svg}
+        <h3 style="margin-top:6px;">{title}</h3>
         <input type="text" id="user" placeholder="Mobile Number / Username">
         <input type="password" id="pass" placeholder="Password">
         <button onclick="login()">Login</button>
@@ -374,7 +399,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-type", "text/html; charset=utf-8")
             self.end_headers()
-            self.wfile.write(render_login("🛡️ Admin Login", "/api/admin/login", "/admin").encode("utf-8"))
+            self.wfile.write(render_login("🛡️ Admin Login", "/api/admin/login", "/admin", ADMIN_LOGO_SVG).encode("utf-8"))
 
         elif p == "/admin":
             if not self.is_auth("admin") and not self.is_auth("owner"):
@@ -383,7 +408,7 @@ class H(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 return
 
-            admin_title = get_setting("admin_title", "🛡️ Payment Admin Panel")
+            admin_title = get_setting("admin_title", "Admin Desk Panel")
             admin_bg = get_setting("admin_bg_color", "#0f172a")
             admin_th = get_setting("admin_table_head", "#334155")
             admin_btn = get_setting("admin_btn_color", "#38bdf8")
@@ -417,7 +442,10 @@ class H(http.server.SimpleHTTPRequestHandler):
 
             blocks = {
                 "a_header": f"""<div id="a_header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                    <h3 id="a_title_text" style="margin:0;">{final_adm_title}</h3>
+                    <div style="display:flex;align-items:center;">
+                        {ADMIN_LOGO_SVG}
+                        <h3 id="a_title_text" style="margin:0;">{final_adm_title}</h3>
+                    </div>
                     <div id="a_actions">
                         <button id="a_ref_text" onclick="location.reload()" style="background:{admin_btn};padding:8px 14px;border:none;border-radius:5px;font-weight:bold;cursor:pointer;color:#000;">{final_ref_text}</button>
                         <button id="a_logout_text" onclick="document.cookie='admin_auth=; Max-Age=0; path=/;';location.href='/admin/login';" style="background:#ef4444;color:#fff;padding:8px 14px;border:none;border-radius:5px;cursor:pointer;margin-left:5px;">{final_logout_text}</button>
@@ -473,7 +501,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-type", "text/html; charset=utf-8")
             self.end_headers()
-            self.wfile.write(render_login("👑 Owner Portal Login", "/api/owner/login", "/owner").encode("utf-8"))
+            self.wfile.write(render_login("👑 Owner Portal Login", "/api/owner/login", "/owner", OWNER_LOGO_SVG).encode("utf-8"))
 
         elif p == "/owner":
             if not self.is_auth("owner"):
@@ -526,7 +554,7 @@ class H(http.server.SimpleHTTPRequestHandler):
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Owner Control Panel</title>
+    <title>Owner Desk Panel</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
@@ -571,9 +599,12 @@ class H(http.server.SimpleHTTPRequestHandler):
 </head>
 <body>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div>
-            <h2 style="margin:0;color:#facc15;">👑 Master Owner Panel</h2>
-            <div style="font-size:11px;color:#38bdf8;margin-top:2px;">📅 Today's Live Stats (Auto Reset 24H)</div>
+        <div style="display:flex;align-items:center;">
+            {OWNER_LOGO_SVG}
+            <div>
+                <h2 style="margin:0;color:#facc15;font-size:18px;">Master Owner Desk</h2>
+                <div style="font-size:11px;color:#38bdf8;margin-top:2px;">📅 Live 24H Auto-Reset Stats</div>
+            </div>
         </div>
         <button onclick="document.cookie='owner_auth=; Max-Age=0; path=/;';location.href='/owner/login';" style="background:#ef4444;color:#fff;width:auto;padding:8px 14px;">Logout</button>
     </div>
