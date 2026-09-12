@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 
 PORT = 5000
 
-MY_UPI_ID = "7546982355-5@ibl"
+MY_UPI_ID = "7546982355-1@mbkns"
 MY_NAME = "Rupa Kumari"
 
 # Received payments store (In-memory database)
@@ -69,7 +69,7 @@ HTML_PAGE = """<!DOCTYPE html>
   <div class="card">
     <div class="logo">पे</div>
     <h2 style="margin: 0;">Rupa Kumari</h2>
-    <p style="color: #94a3b8; font-size: 13px; margin: 5px 0 15px;">7546982355-5@ibl</p>
+    <p style="color: #94a3b8; font-size: 13px; margin: 5px 0 15px;">7546982355-1@mbkns</p>
 
     <div id="step-1">
       <input type="number" id="amt" class="input-box" placeholder="Amount (₹)" value="100">
