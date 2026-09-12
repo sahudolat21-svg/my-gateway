@@ -83,13 +83,7 @@ HTML_PAGE = """<!DOCTYPE html>
         <img id="qr-img" class="qr-img" src="" alt="UPI QR">
 <div style="margin-top:10px;"><a id="dl-qr" href="#" download="upi_qr.png" style="display:inline-block;padding:8px 16px;background:#28a745;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:bold;">📥 Download QR Code</a></div>
       </div>
-      <p style="font-size: 12px; color: #94a3b8; margin: 0 0 10px;">Scan karein ya direct app choose karein:
-        <div style="margin: 12px auto; max-width: 290px; padding: 10px; background: rgba(255,255,255,0.08); border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); font-size: 12px; color: #e2e8f0; text-align: left;">
-            <span style="color: #38bdf8; font-weight: bold;">💳 Supported Modes:</span><br>
-            • RuPay Credit Card (UPI)<br>
-            • Debit Card (UPI Linked)<br>
-            • All UPI Apps
-        </div></p>
+      <p style="font-size: 12px; color: #94a3b8; margin: 0 0 10px;">Scan karein ya direct app choose karein:</p>
 
       <!-- Three Dedicated Buttons -->
       <div class="app-btn-group">
@@ -155,6 +149,15 @@ HTML_PAGE = """<!DOCTYPE html>
     }
   </script>
 
+
+        <div style="margin: 15px auto; max-width: 320px; padding: 12px; background: #eef2ff; border-radius: 8px; border: 1px dashed #6366f1; font-size: 13px; color: #3730a3; text-align: left;">
+            <strong>💳 Supported Payment Methods:</strong>
+            <ul style="margin: 5px 0 0 18px; padding: 0;">
+                <li>UPI (PhonePe, Google Pay, Paytm)</li>
+                <li>RuPay Credit Card (via UPI Apps)</li>
+                <li>Debit Card (Linked to UPI)</li>
+            </ul>
+        </div>
 
 </body>
 </html>
