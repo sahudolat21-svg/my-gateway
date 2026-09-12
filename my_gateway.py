@@ -220,6 +220,24 @@ class GatewayHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(res).encode("utf-8"))
 
     def do_POST(self):
+        elif self.path == '/api/bank-sms':
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                payload = json.loads(post_data.decode('utf-8'))
+                sms_text = payload.get('message', '')
+                utr_match = re.search(r'\d{12}', sms_text)
+                if utr_match:
+                    utr = utr_match.group(0)
+                    received_payments[utr] = {'status': 'SUCCESS', 'raw': sms_text}
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(b'{"status":"ok"}')
+            except Exception:
+                self.send_response(400)
+                self.end_headers()
+
         if self.path == "/sms_hook":
             length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(length).decode('utf-8')
