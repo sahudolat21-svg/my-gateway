@@ -25,7 +25,6 @@ def init_db():
         val TEXT
     )""")
     
-    # Default settings
     defaults = {
         'upi_id': '7546982355-1@mbkns',
         'receiver_name': 'Rupa Kumari',
@@ -33,18 +32,21 @@ def init_db():
         'admin_pass': '7546982355',
         'owner_user': 'owner7546',
         'owner_pass': 'owner7546',
-        # User Customization
         'user_page_title': 'UPI Checkout',
         'user_bg_color': '#0f172a',
         'user_card_color': '#1e293b',
         'user_btn_color': '#0284c7',
         'user_badge_text': '💳 Supported: RuPay Credit Card, Debit Card & UPI Apps',
         'user_success_msg': 'Aapka payment verify aur approve kar diya gaya hai.',
-        # Admin Customization
         'admin_title': '🛡️ Payment Admin Panel',
         'admin_bg_color': '#0f172a',
         'admin_table_head': '#334155',
-        'admin_btn_color': '#38bdf8'
+        'admin_btn_color': '#38bdf8',
+        # Hand Control Layouts
+        'user_hand_order': '["u_name","u_upi","u_amtbox","u_qr","u_downbtn","u_badge","u_phonepe","u_gpay","u_paytm","u_proofbox"]',
+        'user_hand_texts': '{}',
+        'admin_hand_order': '["a_title","a_actions","a_table"]',
+        'admin_hand_texts': '{}'
     }
     for k, v in defaults.items():
         c.execute("INSERT OR IGNORE INTO settings (key, val) VALUES (?, ?)", (k, v))
@@ -76,6 +78,59 @@ def render_pay_page():
     badge_text = get_setting("user_badge_text", "💳 Supported: RuPay Credit Card, Debit Card & UPI Apps")
     success_msg = get_setting("user_success_msg", "Aapka payment verify aur approve kar diya gaya hai.")
 
+    # Hand control orders & texts
+    order_raw = get_setting("user_hand_order", '[]')
+    try:
+        order = json.loads(order_raw)
+    except:
+        order = ["u_name","u_upi","u_amtbox","u_qr","u_downbtn","u_badge","u_phonepe","u_gpay","u_paytm","u_proofbox"]
+
+    texts_raw = get_setting("user_hand_texts", '{}')
+    try:
+        custom_texts = json.loads(texts_raw)
+    except:
+        custom_texts = {}
+
+    txt_name = custom_texts.get("u_name", name)
+    txt_upi = custom_texts.get("u_upi", upi_id)
+    txt_down = custom_texts.get("u_downbtn", "📥 Download QR Code")
+    txt_badge = custom_texts.get("u_badge", badge_text)
+    txt_phonepe = custom_texts.get("u_phonepe", "Pay via PhonePe")
+    txt_gpay = custom_texts.get("u_gpay", "Pay via Google Pay")
+    txt_paytm = custom_texts.get("u_paytm", "Pay via Paytm")
+
+    # Map of elements for user page
+    el_map = {
+        "u_name": f'<h3 id="u_name" style="margin:0;">{txt_name}</h3>',
+        "u_upi": f'<div id="u_upi" style="color:#94a3b8;font-size:12px;margin-top:4px;">{txt_upi}</div>',
+        "u_amtbox": f'''<div id="u_amtbox">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 6px 0;">
+                <span id="displayAmt" style="font-size:20px;color:{btn_col};font-weight:bold;">₹0</span>
+                <button onclick="changeAmt()" style="background:transparent;border:1px solid #64748b;color:#94a3b8;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px;">Edit Amount</button>
+            </div>
+        </div>''',
+        "u_qr": '<div id="u_qr"><div id="qrcode"></div></div>',
+        "u_downbtn": f'<button id="u_downbtn" type="button" onclick="downloadQR()" style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:5px;margin-top:6px;font-weight:bold;cursor:pointer;width:100%;">{txt_down}</button>',
+        "u_badge": f'<div id="u_badge" class="badge">{txt_badge}</div>',
+        "u_phonepe": f'<a id="btnPhonePe" class="btn" style="background:#5f259f;" href="#">{txt_phonepe}</a>',
+        "u_gpay": f'<a id="btnGPay" class="btn" style="background:#1a73e8;" href="#">{txt_gpay}</a>',
+        "u_paytm": f'<a id="btnPaytm" class="btn" style="background:#00b9f1;" href="#">{txt_paytm}</a>',
+        "u_proofbox": '''<div id="u_proofbox" style="border-top:1px solid rgba(255,255,255,0.1);margin-top:15px;padding-top:10px;text-align:left;font-size:12px;">
+            <label>12-Digit UTR Number:</label>
+            <input type="text" id="u" maxlength="12" placeholder="Enter 12-digit UTR">
+            <label>Payment Proof (Screenshot):</label>
+            <input type="file" id="p" accept="image/*">
+            <button class="btn" style="background:#10b981;" onclick="sendProof()">Submit Proof</button>
+            <div id="st" style="margin-top:8px;font-weight:bold;text-align:center;"></div>
+        </div>'''
+    }
+
+    # Construct ordered HTML for Step 2
+    ordered_step2 = ""
+    for eid in order:
+        if eid in el_map and eid not in ["u_name", "u_upi"]:
+            ordered_step2 += el_map[eid]
+
     return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -99,8 +154,8 @@ def render_pay_page():
 </head>
 <body>
     <div class="c">
-        <h3 style="margin:0;">{name}</h3>
-        <div style="color:#94a3b8;font-size:12px;margin-top:4px;">{upi_id}</div>
+        {el_map.get("u_name", "")}
+        {el_map.get("u_upi", "")}
         
         <div id="step1">
             <div class="amt-box">
@@ -112,30 +167,7 @@ def render_pay_page():
         </div>
 
         <div id="step2">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 6px 0;">
-                <span id="displayAmt" style="font-size:20px;color:{btn_col};font-weight:bold;">₹0</span>
-                <button onclick="changeAmt()" style="background:transparent;border:1px solid #64748b;color:#94a3b8;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px;">Edit Amount</button>
-            </div>
-
-            <div id="qrcode"></div>
-            <button type="button" onclick="downloadQR()" style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:5px;margin-top:6px;font-weight:bold;cursor:pointer;">📥 Download QR Code</button>
-
-            <div class="badge">{badge_text}</div>
-
-            <a id="btnPhonePe" class="btn" style="background:#5f259f;" href="#">Pay via PhonePe</a>
-            <a id="btnGPay" class="btn" style="background:#1a73e8;" href="#">Pay via Google Pay</a>
-            <a id="btnPaytm" class="btn" style="background:#00b9f1;" href="#">Pay via Paytm</a>
-
-            <div id="form-container" style="border-top:1px solid rgba(255,255,255,0.1);margin-top:15px;padding-top:10px;text-align:left;font-size:12px;">
-                <label>12-Digit UTR Number:</label>
-                <input type="text" id="u" maxlength="12" placeholder="Enter 12-digit UTR">
-                
-                <label>Payment Proof (Screenshot):</label>
-                <input type="file" id="p" accept="image/*">
-                
-                <button class="btn" style="background:#10b981;" onclick="sendProof()">Submit Proof</button>
-                <div id="st" style="margin-top:8px;font-weight:bold;text-align:center;"></div>
-            </div>
+            {ordered_step2}
         </div>
 
         <div id="success-modal">
@@ -159,21 +191,28 @@ def render_pay_page():
         err.innerText = "";
         currentAmt = amt;
 
-        document.getElementById('displayAmt').innerText = "₹" + amt;
+        var da = document.getElementById('displayAmt');
+        if(da) da.innerText = "₹" + amt;
+        
         var upiUri = "upi://pay?pa=" + encodeURIComponent(upiId) + "&pn=" + encodeURIComponent(name) + "&am=" + amt + "&cu=INR";
 
-        document.getElementById('btnPhonePe').href = "phonepe://pay?pa=" + encodeURIComponent(upiId) + "&pn=" + encodeURIComponent(name) + "&am=" + amt + "&cu=INR";
-        document.getElementById('btnGPay').href = "tez://upi/pay?pa=" + encodeURIComponent(upiId) + "&pn=" + encodeURIComponent(name) + "&am=" + amt + "&cu=INR";
-        document.getElementById('btnPaytm').href = "paytmmp://pay?pa=" + encodeURIComponent(upiId) + "&pn=" + encodeURIComponent(name) + "&am=" + amt + "&cu=INR";
+        var bp = document.getElementById('btnPhonePe');
+        if(bp) bp.href = "phonepe://pay?pa=" + encodeURIComponent(upiId) + "&pn=" + encodeURIComponent(name) + "&am=" + amt + "&cu=INR";
+        var bg = document.getElementById('btnGPay');
+        if(bg) bg.href = "tez://upi/pay?pa=" + encodeURIComponent(upiId) + "&pn=" + encodeURIComponent(name) + "&am=" + amt + "&cu=INR";
+        var bpt = document.getElementById('btnPaytm');
+        if(bpt) bpt.href = "paytmmp://pay?pa=" + encodeURIComponent(upiId) + "&pn=" + encodeURIComponent(name) + "&am=" + amt + "&cu=INR";
 
         var qrDiv = document.getElementById('qrcode');
-        qrDiv.innerHTML = "";
-        new QRCode(qrDiv, {{
-            text: upiUri,
-            width: 170,
-            height: 170,
-            correctLevel: QRCode.CorrectLevel.M
-        }});
+        if(qrDiv) {{
+            qrDiv.innerHTML = "";
+            new QRCode(qrDiv, {{
+                text: upiUri,
+                width: 170,
+                height: 170,
+                correctLevel: QRCode.CorrectLevel.M
+            }});
+        }}
 
         document.getElementById('step1').style.display = 'none';
         document.getElementById('step2').style.display = 'block';
@@ -220,7 +259,8 @@ def render_pay_page():
                     setInterval(() => {{
                         fetch('/api/check-status?utr=' + u).then(r => r.json()).then(res => {{
                             if (res.status === 'APPROVED') {{
-                                document.getElementById('form-container').style.display = 'none';
+                                var pb = document.getElementById('u_proofbox');
+                                if(pb) pb.style.display = 'none';
                                 document.getElementById('success-modal').style.display = 'block';
                             }}
                         }});
@@ -328,6 +368,23 @@ class H(http.server.SimpleHTTPRequestHandler):
             admin_th = get_setting("admin_table_head", "#334155")
             admin_btn = get_setting("admin_btn_color", "#38bdf8")
 
+            # Custom text from Hand Control
+            adm_texts_raw = get_setting("admin_hand_texts", '{}')
+            try:
+                adm_texts = json.loads(adm_texts_raw)
+            except:
+                adm_texts = {}
+            final_adm_title = adm_texts.get("a_title_text", admin_title)
+            final_ref_text = adm_texts.get("a_ref_text", "Refresh")
+            final_logout_text = adm_texts.get("a_logout_text", "Logout")
+
+            # Custom order
+            adm_order_raw = get_setting("admin_hand_order", '["a_header","a_table"]')
+            try:
+                adm_order = json.loads(adm_order_raw)
+            except:
+                adm_order = ["a_header","a_table"]
+
             conn = sqlite3.connect(DB_FILE)
             rows = conn.cursor().execute("SELECT id, utr, amt, proof, status, dt FROM tx ORDER BY id DESC").fetchall()
             conn.close()
@@ -340,15 +397,36 @@ class H(http.server.SimpleHTTPRequestHandler):
                 del_btn = f'<button onclick="delTx({r[0]})" style="background:#ef4444;color:#fff;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:12px;margin-left:6px;font-weight:bold;">🗑 Delete</button>'
                 trs += f'<tr style="border-bottom:1px solid #334155;"><td style="font-weight:bold;">#{r[0]}</td><td style="font-family:monospace;font-weight:bold;">{r[1]}</td><td>₹{r[2]}</td><td>{im}</td><td style="color:{col};font-weight:bold;">{r[4]}</td><td style="font-size:11px;color:#94a3b8;">{r[5]}</td><td style="white-space:nowrap;">{act} {del_btn}</td></tr>'
 
+            blocks = {
+                "a_header": f"""<div id="a_header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <h3 id="a_title_text" style="margin:0;">{final_adm_title}</h3>
+                    <div id="a_actions">
+                        <button id="a_ref_text" onclick="location.reload()" style="background:{admin_btn};padding:8px 14px;border:none;border-radius:5px;font-weight:bold;cursor:pointer;color:#000;">{final_ref_text}</button>
+                        <button id="a_logout_text" onclick="document.cookie='admin_auth=; Max-Age=0; path=/;';location.href='/admin/login';" style="background:#ef4444;color:#fff;padding:8px 14px;border:none;border-radius:5px;cursor:pointer;margin-left:5px;">{final_logout_text}</button>
+                    </div>
+                </div>""",
+                "a_table": f"""<div id="a_table" style="overflow-x:auto;">
+                    <table>
+                        <thead><tr><th>ID</th><th>UTR</th><th>Amt</th><th>Proof</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
+                        <tbody>{trs if trs else '<tr><td colspan="7" style="text-align:center;padding:25px;color:#94a3b8;">Koi record nahi hai.</td></tr>'}</tbody>
+                    </table>
+                </div>"""
+            }
+
+            rendered_body = ""
+            for k in adm_order:
+                if k in blocks:
+                    rendered_body += blocks[k]
+
             adm = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>{admin_title}</title>
+    <title>{final_adm_title}</title>
     <style>
         * {{ touch-action: manipulation; -webkit-text-size-adjust: 100%; box-sizing: border-box; }}
         body {{ background:{admin_bg}; color:#fff; font-family:sans-serif; padding:15px; margin:0; }}
-        table {{ width:100%; background:#1e293b; border-collapse:collapse; border-radius:8px; overflow:hidden; margin-top:12px; }}
+        table {{ width:100%; background:#1e293b; border-collapse:collapse; border-radius:8px; overflow:hidden; }}
         th, td {{ padding:10px; text-align:left; }}
         th {{ background:{admin_th}; font-size:13px; }}
         #imgModal {{ display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.9); justify-content:center; align-items:center; padding:15px; }}
@@ -357,19 +435,7 @@ class H(http.server.SimpleHTTPRequestHandler):
     </style>
 </head>
 <body>
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-        <h3>{admin_title}</h3>
-        <div>
-            <button onclick="location.reload()" style="background:{admin_btn};padding:8px 14px;border:none;border-radius:5px;font-weight:bold;cursor:pointer;color:#000;">Refresh</button>
-            <button onclick="document.cookie='admin_auth=; Max-Age=0; path=/;';location.href='/admin/login';" style="background:#ef4444;color:#fff;padding:8px 14px;border:none;border-radius:5px;cursor:pointer;margin-left:5px;">Logout</button>
-        </div>
-    </div>
-    <div style="overflow-x:auto;">
-        <table>
-            <thead><tr><th>ID</th><th>UTR</th><th>Amt</th><th>Proof</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
-            <tbody>{trs if trs else '<tr><td colspan="7" style="text-align:center;padding:25px;color:#94a3b8;">Koi record nahi hai.</td></tr>'}</tbody>
-        </table>
-    </div>
+    {rendered_body}
     <div id="imgModal" onclick="closeImg()"><span id="closeModal">&times;</span><img id="modalImg" src=""></div>
     <script>
     function viewImg(src) {{ document.getElementById('modalImg').src = src; document.getElementById('imgModal').style.display = 'flex'; }}
@@ -420,7 +486,6 @@ class H(http.server.SimpleHTTPRequestHandler):
             admin_pass = get_setting("admin_pass")
             owner_user = get_setting("owner_user")
 
-            # Customization Settings
             u_title = get_setting("user_page_title", "UPI Checkout")
             u_bg = get_setting("user_bg_color", "#0f172a")
             u_card = get_setting("user_card_color", "#1e293b")
@@ -432,6 +497,12 @@ class H(http.server.SimpleHTTPRequestHandler):
             adm_bg = get_setting("admin_bg_color", "#0f172a")
             adm_th = get_setting("admin_table_head", "#334155")
             adm_btn = get_setting("admin_btn_color", "#38bdf8")
+
+            # Load Hand Control Data
+            user_hand_order = get_setting("user_hand_order", '["u_name","u_upi","u_amtbox","u_qr","u_downbtn","u_badge","u_phonepe","u_gpay","u_paytm","u_proofbox"]')
+            user_hand_texts = get_setting("user_hand_texts", '{}')
+            admin_hand_order = get_setting("admin_hand_order", '["a_header","a_table"]')
+            admin_hand_texts = get_setting("admin_hand_texts", '{}')
 
             all_trs_html = ""
             for r in all_rows:
@@ -445,6 +516,8 @@ class H(http.server.SimpleHTTPRequestHandler):
     <title>Owner Control Panel</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <!-- SortableJS for smooth touch drag and drop with hands -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <style>
         * {{ touch-action: manipulation; -webkit-text-size-adjust: 100%; box-sizing: border-box; }}
         body {{ background:#090d16; color:#f8fafc; font-family:sans-serif; padding:15px; margin:0; }}
@@ -457,6 +530,14 @@ class H(http.server.SimpleHTTPRequestHandler):
         .color-row input[type="color"] {{ border:none; width:45px; height:35px; border-radius:4px; cursor:pointer; background:transparent; }}
         label {{ font-size:12px; color:#94a3b8; font-weight:bold; }}
         button {{ width:100%; padding:12px; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:15px; }}
+
+        /* Hand Control Drag Area */
+        .hand-container {{ background:#0f172a; border:2px dashed #475569; border-radius:10px; padding:12px; margin:12px 0; display:flex; flex-direction:column; gap:8px; }}
+        .hand-item {{ background:#1e293b; border:1px solid #334155; border-radius:8px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; cursor:grab; user-select:none; }}
+        .hand-item:active {{ cursor:grabbing; background:#334155; border-color:#38bdf8; }}
+        .drag-handle {{ font-size:20px; color:#94a3b8; margin-right:10px; cursor:grab; }}
+        .editable-text {{ outline:none; border-bottom:1px dashed #64748b; padding:2px 4px; border-radius:3px; flex:1; margin-left:6px; }}
+        .editable-text:focus {{ border-bottom:2px solid #38bdf8; background:rgba(56,189,248,0.1); }}
         
         #allRecordsModal {{ display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.92); justify-content:center; align-items:center; padding:15px; }}
         .modal-content {{ background:#1e293b; width:100%; max-width:650px; max-height:92vh; border-radius:12px; border:1px solid #38bdf8; display:flex; flex-direction:column; padding:18px; }}
@@ -479,14 +560,13 @@ class H(http.server.SimpleHTTPRequestHandler):
         <div class="stat"><div style="font-size:11px;color:#94a3b8;">Rejected Orders</div><div class="stat-val" style="color:#ef4444;">{day_rej}</div></div>
     </div>
 
-    <!-- All Day Records Button -->
     <div style="margin-bottom:15px;">
         <button onclick="openAllRecords()" style="background:#6366f1;color:#fff;display:flex;justify-content:center;align-items:center;gap:8px;font-size:16px;box-shadow:0 4px 12px rgba(99,102,241,0.3);">
             📊 View All-Time Record (Lifetime History)
         </button>
     </div>
 
-    <!-- Payment Settings Form -->
+    <!-- Settings Form -->
     <div class="card">
         <h3 style="margin:0 0 12px 0;color:#38bdf8;">💳 UPI & Receiver Settings</h3>
         <label>UPI ID (QR & Links):</label>
@@ -496,7 +576,7 @@ class H(http.server.SimpleHTTPRequestHandler):
         <button style="background:#0284c7;color:#fff;" onclick="saveUpi()">Save UPI Settings</button>
     </div>
 
-    <!-- Staff / Admin Credentials -->
+    <!-- Staff Credentials -->
     <div class="card">
         <h3 style="margin:0 0 12px 0;color:#a855f7;">🛡️ Admin Panel Login Credentials</h3>
         <label>Admin Mobile / User:</label>
@@ -506,7 +586,7 @@ class H(http.server.SimpleHTTPRequestHandler):
         <button style="background:#9333ea;color:#fff;" onclick="saveAdmin()">Update Admin Credentials</button>
     </div>
 
-    <!-- Owner Password Change -->
+    <!-- Owner Password -->
     <div class="card">
         <h3 style="margin:0 0 12px 0;color:#f59e0b;">🔒 Change Owner Password</h3>
         <label>Owner Username:</label>
@@ -516,54 +596,66 @@ class H(http.server.SimpleHTTPRequestHandler):
         <button style="background:#d97706;color:#fff;" onclick="saveOwner()">Update Owner Password</button>
     </div>
 
-    <!-- 1. CUSTOMIZE USER PANEL (NEW) -->
+    <!-- Theme Customization (Colors) -->
     <div class="card" style="border-left:4px solid #10b981;">
-        <h3 style="margin:0 0 12px 0;color:#10b981;">🎨 Customize User Panel</h3>
-        <label>Page Title / Header:</label>
+        <h3 style="margin:0 0 12px 0;color:#10b981;">🎨 Customize Colors (User Panel)</h3>
+        <label>Page Title:</label>
         <input type="text" id="user_page_title" value="{u_title}">
-        
-        <label>Background Color (Tap color box):</label>
         <div class="color-row"><span>Background Color</span><input type="color" id="user_bg_color" value="{u_bg}"></div>
-
-        <label>Card Box Color:</label>
         <div class="color-row"><span>Card Color</span><input type="color" id="user_card_color" value="{u_card}"></div>
-
-        <label>Accent / Button Color:</label>
         <div class="color-row"><span>Button Color</span><input type="color" id="user_btn_color" value="{u_btn}"></div>
-
-        <label>Supported Cards Badge Text:</label>
+        <label>Supported Cards Badge:</label>
         <input type="text" id="user_badge_text" value="{u_badge}">
-
-        <label>Payment Success Message:</label>
+        <label>Payment Success Msg:</label>
         <input type="text" id="user_success_msg" value="{u_msg}">
-
-        <button style="background:#10b981;color:#fff;" onclick="saveUserCustomization()">💾 Save User Panel Theme</button>
+        <button style="background:#10b981;color:#fff;" onclick="saveUserCustomization()">💾 Save Theme Colors</button>
     </div>
 
-    <!-- 2. CUSTOMIZE ADMIN PANEL (NEW) -->
+    <!-- 1. HAND CONTROL: USER PANEL (NEW) -->
+    <div class="card" style="border-left:4px solid #f59e0b;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="margin:0;color:#f59e0b;">🖐️ Hand Control: User Panel (Drag & Drop + Edit Text)</h3>
+        </div>
+        <p style="font-size:12px;color:#94a3b8;margin:6px 0 10px 0;">
+            👉 <b>Ungli se pakad kar upar-niche karein</b> kisi bhi button ko kahin bhi shift karne ke liye.<br>
+            ✏️ <b>Text par click karke</b> wahi ka wahi text badal sakte hain.
+        </p>
+
+        <div id="userHandList" class="hand-container">
+            <!-- Items injected by JS based on saved order -->
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:10px;">
+            <button style="background:#10b981;color:#fff;flex:2;" onclick="saveUserHand()">💾 Save User Layout</button>
+            <button style="background:#475569;color:#fff;flex:1;" onclick="resetUserHand()">🔄 Reset</button>
+        </div>
+    </div>
+
+    <!-- 2. HAND CONTROL: ADMIN PANEL (NEW) -->
     <div class="card" style="border-left:4px solid #38bdf8;">
-        <h3 style="margin:0 0 12px 0;color:#38bdf8;">⚙️ Customize Admin Panel</h3>
-        <label>Admin Panel Title:</label>
-        <input type="text" id="admin_title" value="{adm_title}">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="margin:0;color:#38bdf8;">🖐️ Hand Control: Admin Panel (Drag & Drop + Edit Text)</h3>
+        </div>
+        <p style="font-size:12px;color:#94a3b8;margin:6px 0 10px 0;">
+            Admin dashboard ke Title, Buttons aur Table ko haath se adjust karein.
+        </p>
 
-        <label>Admin Background Color:</label>
-        <div class="color-row"><span>Background Color</span><input type="color" id="admin_bg_color" value="{adm_bg}"></div>
+        <div id="adminHandList" class="hand-container">
+            <!-- Items injected by JS -->
+        </div>
 
-        <label>Table Header Color:</label>
-        <div class="color-row"><span>Header Color</span><input type="color" id="admin_table_head" value="{adm_th}"></div>
-
-        <label>Refresh Button Color:</label>
-        <div class="color-row"><span>Refresh Button Color</span><input type="color" id="admin_btn_color" value="{adm_btn}"></div>
-
-        <button style="background:#0284c7;color:#fff;" onclick="saveAdminCustomization()">💾 Save Admin Panel Theme</button>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+            <button style="background:#0284c7;color:#fff;flex:2;" onclick="saveAdminHand()">💾 Save Admin Layout</button>
+            <button style="background:#475569;color:#fff;flex:1;" onclick="resetAdminHand()">🔄 Reset</button>
+        </div>
     </div>
 
-    <div style="text-align:center;margin:20px 0;">
+    <div style="text-align:center;margin:25px 0 10px 0;">
         <a href="/admin" target="_blank" style="color:#38bdf8;font-size:14px;text-decoration:none;margin-right:15px;">➔ Open Admin Panel</a>
         <a href="/" target="_blank" style="color:#10b981;font-size:14px;text-decoration:none;">➔ Open User Checkout Page</a>
     </div>
 
-    <!-- Fullscreen All-Time Records Modal -->
+    <!-- All-Time Records Modal -->
     <div id="allRecordsModal">
         <div class="modal-content">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -602,33 +694,24 @@ class H(http.server.SimpleHTTPRequestHandler):
     var lifetimePending = "{all_pend}";
     var lifetimeRejected = "{all_rej}";
 
-    function openAllRecords() {{
-        document.getElementById('allRecordsModal').style.display = 'flex';
-    }}
-    function closeAllRecords() {{
-        document.getElementById('allRecordsModal').style.display = 'none';
-    }}
+    function openAllRecords() {{ document.getElementById('allRecordsModal').style.display = 'flex'; }}
+    function closeAllRecords() {{ document.getElementById('allRecordsModal').style.display = 'none'; }}
 
     function downloadPDF() {{
         var btn = event.target;
         var originalText = btn.innerHTML;
         btn.innerText = "⏳ Generating PDF...";
         btn.disabled = true;
-
         try {{
             const {{ jsPDF }} = window.jspdf;
             const doc = new jsPDF();
-
             doc.setFontSize(18);
             doc.setTextColor(30, 41, 59);
             doc.text("Payment Gateway - Lifetime Records", 14, 18);
-
+            var now = new Date();
             doc.setFontSize(10);
             doc.setTextColor(100, 116, 139);
-            var now = new Date();
-            var dateStr = now.toLocaleDateString() + ' ' + now.toLocaleTimeString();
-            doc.text("Generated on: " + dateStr, 14, 25);
-
+            doc.text("Generated on: " + now.toLocaleDateString() + ' ' + now.toLocaleTimeString(), 14, 25);
             doc.autoTable({{
                 startY: 30,
                 head: [['Metric', 'Value']],
@@ -643,7 +726,6 @@ class H(http.server.SimpleHTTPRequestHandler):
                 headStyles: {{ fillColor: [56, 189, 248], textColor: 255, fontStyle: 'bold' }},
                 margin: {{ left: 14, right: 14 }}
             }});
-
             doc.autoTable({{
                 html: '#recordsTable',
                 startY: doc.lastAutoTable.finalY + 10,
@@ -652,40 +734,36 @@ class H(http.server.SimpleHTTPRequestHandler):
                 alternateRowStyles: {{ fillColor: [248, 250, 252] }},
                 margin: {{ left: 14, right: 14 }}
             }});
-
-            var fileName = "payment_records_" + now.toISOString().slice(0, 10) + ".pdf";
-            doc.save(fileName);
+            doc.save("payment_records_" + now.toISOString().slice(0, 10) + ".pdf");
         }} catch(e) {{
-            alert("PDF generate karne me error aaya: " + e.message);
+            alert("PDF error: " + e.message);
         }} finally {{
             btn.innerHTML = originalText;
             btn.disabled = false;
         }}
     }}
 
-    function postSetting(data) {{
+    function postSetting(data, cb) {{
         fetch('/api/owner/save-settings', {{
             method: 'POST',
             headers: {{'Content-Type': 'application/json'}},
             body: JSON.stringify(data)
         }}).then(r => r.json()).then(d => {{
-            if(d.ok) alert('Settings successfully updated!');
-            else alert('Error updating settings.');
+            if(d.ok) {{
+                if(cb) cb();
+                else alert('Settings successfully updated!');
+            }} else alert('Error updating settings.');
         }});
     }}
-    function saveUpi() {{
-        postSetting({{ upi_id: document.getElementById('upi_id').value.trim(), receiver_name: document.getElementById('receiver_name').value.trim() }});
-    }}
-    function saveAdmin() {{
-        postSetting({{ admin_user: document.getElementById('admin_user').value.trim(), admin_pass: document.getElementById('admin_pass').value.trim() }});
-    }}
+
+    function saveUpi() {{ postSetting({{ upi_id: document.getElementById('upi_id').value.trim(), receiver_name: document.getElementById('receiver_name').value.trim() }}); }}
+    function saveAdmin() {{ postSetting({{ admin_user: document.getElementById('admin_user').value.trim(), admin_pass: document.getElementById('admin_pass').value.trim() }}); }}
     function saveOwner() {{
         var p = document.getElementById('owner_pass').value.trim();
         var u = document.getElementById('owner_user').value.trim();
         if(!p) return alert('Kripya naya password daalein!');
         postSetting({{ owner_user: u, owner_pass: p }});
     }}
-
     function saveUserCustomization() {{
         postSetting({{
             user_page_title: document.getElementById('user_page_title').value.trim(),
@@ -697,13 +775,130 @@ class H(http.server.SimpleHTTPRequestHandler):
         }});
     }}
 
-    function saveAdminCustomization() {{
-        postSetting({{
-            admin_title: document.getElementById('admin_title').value.trim(),
-            admin_bg_color: document.getElementById('admin_bg_color').value,
-            admin_table_head: document.getElementById('admin_table_head').value,
-            admin_btn_color: document.getElementById('admin_btn_color').value
+    /* ================= HAND CONTROL ENGINE ================= */
+    var userItemsDef = {{
+        "u_name": {{ label: "Header Name", defText: "{name}" }},
+        "u_upi": {{ label: "UPI ID Subtext", defText: "{upi_id}" }},
+        "u_amtbox": {{ label: "Amount Display Box", defText: "₹ Amount View" }},
+        "u_qr": {{ label: "QR Code Section", defText: "QR Code Graphic" }},
+        "u_downbtn": {{ label: "Download QR Button", defText: "📥 Download QR Code" }},
+        "u_badge": {{ label: "Supported Cards Badge", defText: "{u_badge}" }},
+        "u_phonepe": {{ label: "PhonePe Button", defText: "Pay via PhonePe" }},
+        "u_gpay": {{ label: "Google Pay Button", defText: "Pay via Google Pay" }},
+        "u_paytm": {{ label: "Paytm Button", defText: "Pay via Paytm" }},
+        "u_proofbox": {{ label: "UTR & Proof Upload Box", defText: "Submit Proof Box" }}
+    }};
+
+    var userSavedOrder = {user_hand_order};
+    var userSavedTexts = {user_hand_texts};
+
+    function buildUserHandList() {{
+        var box = document.getElementById('userHandList');
+        box.innerHTML = "";
+        userSavedOrder.forEach(function(key) {{
+            if(userItemsDef[key]) {{
+                var item = userItemsDef[key];
+                var curText = userSavedTexts[key] || item.defText;
+                var div = document.createElement('div');
+                div.className = "hand-item";
+                div.setAttribute('data-id', key);
+                div.innerHTML = '<span class="drag-handle">☰</span> <span style="font-size:12px;color:#94a3b8;min-width:110px;">' + item.label + ':</span> <span class="editable-text" contenteditable="true">' + curText + '</span>';
+                box.appendChild(div);
+            }}
         }});
+    }}
+
+    buildUserHandList();
+    new Sortable(document.getElementById('userHandList'), {{ animation: 150, handle: '.drag-handle' }});
+
+    function saveUserHand() {{
+        var list = document.getElementById('userHandList').children;
+        var order = [];
+        var texts = {{}};
+        for(var i=0; i<list.length; i++) {{
+            var el = list[i];
+            var id = el.getAttribute('data-id');
+            order.push(id);
+            var txt = el.querySelector('.editable-text').innerText.trim();
+            texts[id] = txt;
+        }}
+        postSetting({{
+            user_hand_order: JSON.stringify(order),
+            user_hand_texts: JSON.stringify(texts)
+        }}, function() {{
+            alert('User Panel Layout aur Texts successfully save ho gaye!');
+        }});
+    }}
+
+    function resetUserHand() {{
+        if(confirm('Kya aap User Panel ko pehle jaisa default banana chahte hain?')) {{
+            var defOrder = ["u_name","u_upi","u_amtbox","u_qr","u_downbtn","u_badge","u_phonepe","u_gpay","u_paytm","u_proofbox"];
+            postSetting({{
+                user_hand_order: JSON.stringify(defOrder),
+                user_hand_texts: JSON.stringify({{}})
+            }}, function() {{
+                location.reload();
+            }});
+        }}
+    }}
+
+    /* --- Admin Panel Hand Control --- */
+    var adminItemsDef = {{
+        "a_header": {{ label: "Admin Title & Buttons Header", defText: "🛡️ Payment Admin Panel" }},
+        "a_table": {{ label: "Transaction Orders Table", defText: "Table Grid (Orders & Actions)" }}
+    }};
+
+    var adminSavedOrder = {admin_hand_order};
+    var adminSavedTexts = {admin_hand_texts};
+
+    function buildAdminHandList() {{
+        var box = document.getElementById('adminHandList');
+        box.innerHTML = "";
+        adminSavedOrder.forEach(function(key) {{
+            if(adminItemsDef[key]) {{
+                var item = adminItemsDef[key];
+                var curText = adminSavedTexts[key] || item.defText;
+                var div = document.createElement('div');
+                div.className = "hand-item";
+                div.setAttribute('data-id', key);
+                div.innerHTML = '<span class="drag-handle">☰</span> <span style="font-size:12px;color:#94a3b8;min-width:110px;">' + item.label + ':</span> <span class="editable-text" contenteditable="true">' + curText + '</span>';
+                box.appendChild(div);
+            }}
+        }});
+    }}
+
+    buildAdminHandList();
+    new Sortable(document.getElementById('adminHandList'), {{ animation: 150, handle: '.drag-handle' }});
+
+    function saveAdminHand() {{
+        var list = document.getElementById('adminHandList').children;
+        var order = [];
+        var texts = {{}};
+        for(var i=0; i<list.length; i++) {{
+            var el = list[i];
+            var id = el.getAttribute('data-id');
+            order.push(id);
+            var txt = el.querySelector('.editable-text').innerText.trim();
+            texts[id] = txt;
+        }}
+        postSetting({{
+            admin_hand_order: JSON.stringify(order),
+            admin_hand_texts: JSON.stringify(texts)
+        }}, function() {{
+            alert('Admin Panel Layout aur Texts successfully save ho gaye!');
+        }});
+    }}
+
+    function resetAdminHand() {{
+        if(confirm('Kya aap Admin Panel ko pehle jaisa default banana chahte hain?')) {{
+            var defOrder = ["a_header","a_table"];
+            postSetting({{
+                admin_hand_order: JSON.stringify(defOrder),
+                admin_hand_texts: JSON.stringify({{}})
+            }}, function() {{
+                location.reload();
+            }});
+        }}
     }}
     </script>
 </body>
