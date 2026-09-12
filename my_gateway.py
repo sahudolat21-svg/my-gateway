@@ -230,7 +230,7 @@ class GatewayHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(res).encode("utf-8"))
 
     def do_POST(self):
-        elif self.path == '/api/bank-sms':
+        if self.path == '/api/bank-sms':
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length)
             try:
