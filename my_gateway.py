@@ -81,6 +81,7 @@ HTML_PAGE = """<!DOCTYPE html>
       
       <div class="qr-container">
         <img id="qr-img" class="qr-img" src="" alt="UPI QR">
+<div style="margin-top:10px;"><a id="dl-qr" href="#" download="upi_qr.png" style="display:inline-block;padding:8px 16px;background:#28a745;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:bold;">📥 Download QR Code</a></div>
       </div>
       <p style="font-size: 12px; color: #94a3b8; margin: 0 0 10px;">Scan karein ya direct app choose karein:</p>
 
