@@ -8,9 +8,16 @@ import os
 import sqlite3
 import random
 import smtplib
+import socket
 from email.mime.text import MIMEText
 from datetime import datetime
 from urllib.parse import urlparse
+
+# Render par IPv6 unreachable error (Errno 101) ko rokne ke liye force IPv4
+orig_getaddrinfo = socket.getaddrinfo
+def getaddrinfo_ipv4(host, port, family=0, type=0, proto=0, flags=0):
+    return orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+socket.getaddrinfo = getaddrinfo_ipv4
 
 PORT = int(os.environ.get("PORT", 8080))
 DB_FILE = "payments.db"
@@ -186,12 +193,12 @@ LOGIN_HTML = """<!DOCTYPE html>
         .box { background:#1e293b; padding:25px; border-radius:12px; width:90%; max-width:320px; text-align:center; border:1px solid #334155; }
         input { width:100%; padding:10px; margin:8px 0; background:#0f172a; border:1px solid #475569; border-radius:5px; color:#fff; box-sizing:border-box; }
         button { width:100%; padding:10px; background:#38bdf8; border:none; border-radius:6px; font-weight:bold; cursor:pointer; margin-top:8px; }
-        a { color:#94a3b8; font-size:12px; text-decoration:none; display:inline-block; margin-top:10px; }
+        a { color:#94a3b8; font-size:13px; text-decoration:none; display:inline-block; margin-top:12px; }
     </style>
 </head>
 <body>
     <div class="box">
-        <h3>🔒 Admin Panel Login</h3>
+        <h3>🔒 Admin Login</h3>
         <input type="email" id="email" placeholder="Email">
         <input type="password" id="pass" placeholder="Password">
         <button onclick="login()">Login</button>
@@ -231,6 +238,7 @@ FORGET_HTML = f"""<!DOCTYPE html>
         .box {{ background:#1e293b; padding:25px; border-radius:12px; width:90%; max-width:320px; text-align:center; border:1px solid #334155; }}
         input {{ width:100%; padding:10px; margin:8px 0; background:#0f172a; border:1px solid #475569; border-radius:5px; color:#fff; box-sizing:border-box; }}
         button {{ width:100%; padding:10px; background:#10b981; border:none; border-radius:6px; font-weight:bold; cursor:pointer; margin-top:8px; }}
+        a {{ color:#94a3b8; font-size:13px; text-decoration:none; display:inline-block; margin-top:14px; }}
     </style>
 </head>
 <body>
@@ -249,10 +257,12 @@ FORGET_HTML = f"""<!DOCTYPE html>
             <button onclick="verifyAndReset()">Reset Password</button>
         </div>
         <div id="msg" style="font-size:12px;margin-top:10px;"></div>
+        <br>
+        <a href="/admin/login">⬅ Back to Login</a>
     </div>
     <script>
     function sendOtp() {{
-        document.getElementById('msg').innerHTML = '<span style="color:#38bdf8;">OTP Gmail par bhej rahe hain...</span>';
+        document.getElementById('msg').innerHTML = '<span style="color:#38bdf8;">Gmail par OTP bhej rahe hain...</span>';
         fetch('/api/admin/send-otp', {{method:'POST'}})
         .then(r => r.json())
         .then(d => {{
@@ -424,20 +434,22 @@ class H(http.server.SimpleHTTPRequestHandler):
             
             if smtp_p:
                 try:
-                    msg = MIMEText(f"Aapka Admin Password Reset OTP hai: {RESET_OTP}")
+                    msg = MIMEText(f"Aapka Admin Password Reset OTP hai: {RESET_OTP}\\n\\nYeh OTP agle 10 minute tak valid hai.")
                     msg["Subject"] = "Admin Password Reset OTP"
                     msg["From"] = smtp_e
                     msg["To"] = ADMIN_EMAIL
                     
-                    server = smtplib.SMTP("smtp.gmail.com", 587, timeout=8)
+                    server = smtplib.SMTP("smtp.gmail.com", 587, timeout=12)
+                    server.ehlo()
                     server.starttls()
+                    server.ehlo()
                     server.login(smtp_e, smtp_p)
                     server.sendmail(smtp_e, [ADMIN_EMAIL], msg.as_string())
                     server.quit()
                     sent = True
                 except Exception as ex1:
                     try:
-                        server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=8)
+                        server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=12)
                         server.login(smtp_e, smtp_p)
                         server.sendmail(smtp_e, [ADMIN_EMAIL], msg.as_string())
                         server.quit()
@@ -448,7 +460,7 @@ class H(http.server.SimpleHTTPRequestHandler):
                 err_msg = "Render me SMTP_PASS set nahi hai."
 
             if sent:
-                res_data = {"ok": True, "msg": "OTP aapke Gmail par bhej diya gaya hai! Inbox check karein."}
+                res_data = {"ok": True, "msg": "OTP aapke Gmail (sahudolat21@gmail.com) par bhej diya gaya hai!"}
             else:
                 res_data = {"ok": False, "msg": f"Email error: {err_msg}"}
 
