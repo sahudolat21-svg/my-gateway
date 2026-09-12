@@ -420,23 +420,27 @@ class H(http.server.SimpleHTTPRequestHandler):
         elif self.path == "/api/admin/send-otp":
             RESET_OTP = str(random.randint(100000, 999999))
             sent = False
-            if SMTP_PASS:
+            smtp_p = os.environ.get("SMTP_PASS", "").replace(" ", "").strip()
+            if smtp_p:
                 try:
                     msg = MIMEText(f"Aapka Admin Reset OTP hai: {RESET_OTP}")
                     msg["Subject"] = "Admin Password Reset OTP"
-                    msg["From"] = SMTP_EMAIL
+                    msg["From"] = ADMIN_EMAIL
                     msg["To"] = ADMIN_EMAIL
-                    server = smtplib.SMTP_SSL("smtp.gmail.com", 465)
-                    server.login(SMTP_EMAIL, SMTP_PASS)
-                    server.sendmail(SMTP_EMAIL, [ADMIN_EMAIL], msg.as_string())
+                    server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=7)
+                    server.login(ADMIN_EMAIL, smtp_p)
+                    server.sendmail(ADMIN_EMAIL, [ADMIN_EMAIL], msg.as_string())
                     server.quit()
                     sent = True
-                except Exception:
+                except Exception as ex:
+                    print("SMTP_ERR:", ex)
                     sent = False
             
-            # Agar SMTP Password set na ho toh Render logs me print karega
-            print(f"\n[SECURITY OTP] Admin Password Reset OTP: {RESET_OTP}\n")
-            msg_txt = "OTP sahudolat21@gmail.com par bhej diya gaya hai." if sent else f"OTP sent! (Render logs me check karein: {RESET_OTP})"
+            print(f"\n[OTP] Admin Reset OTP: {RESET_OTP}\n")
+            if sent:
+                msg_txt = "OTP aapke email par bhej diya gaya hai!"
+            else:
+                msg_txt = f"OTP bhej diya gaya: {RESET_OTP}"
             
             self.send_response(200)
             self.send_header("Content-type", "application/json")
