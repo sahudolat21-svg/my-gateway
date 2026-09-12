@@ -7,7 +7,12 @@ from datetime import datetime
 from urllib.parse import urlparse
 
 PORT = int(os.environ.get("PORT", 8080))
-DB_FILE = "payments.db"
+
+# Agar Render Persistent Disk use karein toh wahan persist hoga, warna current directory me safe rahega
+if os.path.exists("/var/data"):
+    DB_FILE = "/var/data/payments.db"
+else:
+    DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "payments.db")
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -49,10 +54,6 @@ def init_db():
     }
     for k, v in defaults.items():
         c.execute("INSERT OR IGNORE INTO settings (key, val) VALUES (?, ?)", (k, v))
-    
-    # Force update owner credentials to new requested numbers
-    c.execute("UPDATE settings SET val='7546982355' WHERE key='owner_user'")
-    c.execute("UPDATE settings SET val='7546982355' WHERE key='owner_pass'")
     
     conn.commit()
     conn.close()
@@ -527,9 +528,12 @@ class H(http.server.SimpleHTTPRequestHandler):
         label {{ font-size:12px; color:#94a3b8; font-weight:bold; }}
         button {{ width:100%; padding:12px; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:15px; }}
 
-        /* EXACT LIVE VISUAL CANVAS STYLING */
-        .phone-mockup {{ max-width:350px; margin:15px auto; background:{u_bg}; border:3px solid #38bdf8; border-radius:24px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,0.6); }}
-        .canvas-card {{ background:{u_card}; padding:15px; border-radius:14px; border:1px solid rgba(255,255,255,0.1); }}
+        /* FULLSCREEN MODALS FOR HAND CONTROL SCREENS */
+        .hand-modal {{ display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.92); justify-content:center; align-items:center; padding:15px; }}
+        .hand-modal-content {{ background:#1e293b; width:100%; max-width:440px; max-height:94vh; border-radius:16px; border:1px solid #38bdf8; display:flex; flex-direction:column; padding:16px; overflow-y:auto; }}
+        
+        .phone-mockup {{ width:100%; max-width:340px; margin:10px auto; background:{u_bg}; border:3px solid #38bdf8; border-radius:22px; padding:15px; box-shadow:0 8px 25px rgba(0,0,0,0.6); }}
+        .canvas-card {{ background:{u_card}; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); }}
         
         .live-draggable-item {{ 
             margin:8px 0; 
@@ -537,12 +541,12 @@ class H(http.server.SimpleHTTPRequestHandler):
             position:relative; 
             border:1.5px dashed rgba(56,189,248,0.4); 
             border-radius:8px; 
-            padding:4px; 
-            transition:0.2s;
+            padding:5px; 
+            background:rgba(255,255,255,0.02);
         }}
-        .live-draggable-item:active {{ cursor:grabbing; opacity:0.8; border-color:#f59e0b; }}
+        .live-draggable-item:active {{ cursor:grabbing; border-color:#f59e0b; background:rgba(245,158,11,0.1); }}
         .live-draggable-item [contenteditable="true"] {{ outline:none; }}
-        .live-draggable-item [contenteditable="true"]:focus {{ background:rgba(56,189,248,0.2); border-radius:4px; }}
+        .live-draggable-item [contenteditable="true"]:focus {{ background:rgba(56,189,248,0.25); border-radius:4px; }}
         
         .canvas-btn {{ display:block; width:100%; padding:10px; border-radius:6px; color:#fff; font-weight:bold; text-align:center; font-size:14px; text-decoration:none; }}
         .canvas-badge {{ padding:8px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15); border-radius:8px; font-size:11px; color:#cbd5e1; text-align:left; }}
@@ -606,56 +610,80 @@ class H(http.server.SimpleHTTPRequestHandler):
 
     <!-- Colors Customization -->
     <div class="card" style="border-left:4px solid #10b981;">
-        <h3 style="margin:0 0 12px 0;color:#10b981;">🎨 Customize Colors (User Panel)</h3>
+        <h3 style="margin:0 0 12px 0;color:#10b981;">🎨 Customize Theme Colors</h3>
         <label>Page Title:</label>
         <input type="text" id="user_page_title" value="{u_title}">
-        <div class="color-row"><span>Background Color</span><input type="color" id="user_bg_color" value="{u_bg}"></div>
-        <div class="color-row"><span>Card Color</span><input type="color" id="user_card_color" value="{u_card}"></div>
+        <div class="color-row"><span>User Background Color</span><input type="color" id="user_bg_color" value="{u_bg}"></div>
+        <div class="color-row"><span>User Card Color</span><input type="color" id="user_card_color" value="{u_card}"></div>
         <div class="color-row"><span>Button Color</span><input type="color" id="user_btn_color" value="{u_btn}"></div>
         <label>Payment Success Msg:</label>
         <input type="text" id="user_success_msg" value="{u_msg}">
         <button style="background:#10b981;color:#fff;" onclick="saveUserCustomization()">💾 Save Theme Colors</button>
     </div>
 
-    <!-- 1. LIVE SCREEN VISUAL BUILDER: USER PANEL -->
+    <!-- HAND CONTROL BUTTONS (DIRECT SHOW NAHI HOGA) -->
     <div class="card" style="border-left:4px solid #f59e0b;">
-        <h3 style="margin:0;color:#f59e0b;">🖐️ Live Screen Hand Control (User Panel)</h3>
-        <p style="font-size:12px;color:#94a3b8;margin:6px 0 12px 0;">
-            👉 <b>Direct phone screen par ungli/haath se kisi bhi button ko pakad kar upar ya niche le jaakar set karein.</b><br>
-            ✏️ <b>Kisi bhi text par tap karke seedhe naya naam likhein.</b>
-        </p>
+        <h3 style="margin:0 0 10px 0;color:#f59e0b;">🖐️ Hand Control Customizer</h3>
+        <p style="font-size:12px;color:#94a3b8;margin:0 0 12px 0;">Niche buttons par click karke screen live kholein aur ungli se jahan chahein wahan drag karein:</p>
+        
+        <button onclick="openUserHandModal()" style="background:#f59e0b;color:#000;margin-bottom:10px;display:flex;justify-content:center;align-items:center;gap:8px;">
+            📱 Open Hand Control (User Panel)
+        </button>
 
-        <!-- The exact live phone mockup -->
-        <div class="phone-mockup">
-            <div class="canvas-card">
-                <div id="liveCanvasItems">
-                    <!-- Elements are rendered here visually in order -->
-                </div>
-            </div>
-        </div>
-
-        <div style="display:flex;gap:10px;margin-top:12px;">
-            <button style="background:#10b981;color:#fff;flex:2;" onclick="saveLiveCanvas()">💾 Save User Panel Layout</button>
-            <button style="background:#475569;color:#fff;flex:1;" onclick="resetLiveCanvas()">🔄 Reset</button>
-        </div>
-    </div>
-
-    <!-- 2. HAND CONTROL: ADMIN PANEL -->
-    <div class="card" style="border-left:4px solid #38bdf8;">
-        <h3 style="margin:0;color:#38bdf8;">🖐️ Hand Control: Admin Panel</h3>
-        <p style="font-size:12px;color:#94a3b8;margin:6px 0 10px 0;">
-            Admin dashboard ke Title, Buttons aur Table ko adjust karein.
-        </p>
-        <div id="adminHandList" style="background:#0f172a;border:2px dashed #475569;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;"></div>
-        <div style="display:flex;gap:10px;margin-top:10px;">
-            <button style="background:#0284c7;color:#fff;flex:2;" onclick="saveAdminHand()">💾 Save Admin Layout</button>
-            <button style="background:#475569;color:#fff;flex:1;" onclick="resetAdminHand()">🔄 Reset</button>
-        </div>
+        <button onclick="openAdminHandModal()" style="background:#38bdf8;color:#000;display:flex;justify-content:center;align-items:center;gap:8px;">
+            ⚙️ Open Hand Control (Admin Panel)
+        </button>
     </div>
 
     <div style="text-align:center;margin:25px 0 10px 0;">
         <a href="/admin" target="_blank" style="color:#38bdf8;font-size:14px;text-decoration:none;margin-right:15px;">➔ Open Admin Panel</a>
         <a href="/" target="_blank" style="color:#10b981;font-size:14px;text-decoration:none;">➔ Open User Checkout Page</a>
+    </div>
+
+    <!-- 1. POPUP MODAL: USER SCREEN HAND CONTROL -->
+    <div id="userHandModal" class="hand-modal">
+        <div class="hand-modal-content">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <h3 style="margin:0;color:#f59e0b;font-size:16px;">🖐️ Hand Control (User Screen)</h3>
+                <span onclick="closeUserHandModal()" style="font-size:24px;color:#fff;cursor:pointer;font-weight:bold;padding:0 8px;">&times;</span>
+            </div>
+            <p style="font-size:11px;color:#94a3b8;margin:0 0 10px 0;">
+                👉 Ungli se button pakad kar upar-niche karein. Text par tap karke live badlein.
+            </p>
+
+            <div class="phone-mockup">
+                <div class="canvas-card">
+                    <div id="liveCanvasItems">
+                        <!-- Draggable screen items -->
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:10px;margin-top:12px;">
+                <button style="background:#10b981;color:#fff;flex:2;" onclick="saveLiveCanvas()">💾 Save Layout</button>
+                <button style="background:#475569;color:#fff;flex:1;" onclick="resetLiveCanvas()">🔄 Reset</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. POPUP MODAL: ADMIN SCREEN HAND CONTROL -->
+    <div id="adminHandModal" class="hand-modal">
+        <div class="hand-modal-content">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <h3 style="margin:0;color:#38bdf8;font-size:16px;">🖐️ Hand Control (Admin Screen)</h3>
+                <span onclick="closeAdminHandModal()" style="font-size:24px;color:#fff;cursor:pointer;font-weight:bold;padding:0 8px;">&times;</span>
+            </div>
+            <p style="font-size:11px;color:#94a3b8;margin:0 0 10px 0;">
+                Admin header aur table ka order ungli se change karein.
+            </p>
+
+            <div id="adminHandList" style="background:#0f172a;border:2px dashed #475569;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;"></div>
+
+            <div style="display:flex;gap:10px;margin-top:12px;">
+                <button style="background:#0284c7;color:#fff;flex:2;" onclick="saveAdminHand()">💾 Save Layout</button>
+                <button style="background:#475569;color:#fff;flex:1;" onclick="resetAdminHand()">🔄 Reset</button>
+            </div>
+        </div>
     </div>
 
     <!-- All-Time Records Modal -->
@@ -699,6 +727,12 @@ class H(http.server.SimpleHTTPRequestHandler):
 
     function openAllRecords() {{ document.getElementById('allRecordsModal').style.display = 'flex'; }}
     function closeAllRecords() {{ document.getElementById('allRecordsModal').style.display = 'none'; }}
+
+    function openUserHandModal() {{ document.getElementById('userHandModal').style.display = 'flex'; }}
+    function closeUserHandModal() {{ document.getElementById('userHandModal').style.display = 'none'; }}
+
+    function openAdminHandModal() {{ document.getElementById('adminHandModal').style.display = 'flex'; }}
+    function closeAdminHandModal() {{ document.getElementById('adminHandModal').style.display = 'none'; }}
 
     function downloadPDF() {{
         var btn = event.target;
@@ -856,6 +890,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             user_hand_texts: JSON.stringify(texts)
         }}, function() {{
             alert('Live User Screen Layout successfully save ho gaya!');
+            closeUserHandModal();
         }});
     }}
 
@@ -915,6 +950,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             admin_hand_texts: JSON.stringify(texts)
         }}, function() {{
             alert('Admin Panel Layout successfully save ho gaya!');
+            closeAdminHandModal();
         }});
     }}
 
